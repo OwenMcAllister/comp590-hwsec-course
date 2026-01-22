@@ -4,13 +4,13 @@
 
 **Report your browser version, CPU type, cache size, RAM amount, and OS. We use this information to learn about the attack’s behavior on different machines.**
 
-- Browser:
-- CPU:
-- Cache sizes:
-- RAM:
-- OS:
+- Browser: Chrome 143
+- CPU: Apple M1
+- Cache sizes: hw.l1dcachesize: 65536
+- RAM: 16 GB
+- OS: MacOS (Catalina)
 
-
+Cache line size = 128
 
 
 ## 1-2
@@ -19,14 +19,14 @@
 
 | Number of Cache Lines | Median Access Latency (ms) |
 | --------------------- | -------------------------- |
-| 1                     |                            |
-| 10                    |                            |
-| 100                   |                            |
-| 1,000                 |                            |
-| 10,000                |                            |
-| 100,000               |                            |
-| 1,000,000             |                            |
-| 10,000,000            |                            |
+| 1                     |  0                          |
+| 10                    |  0                          |
+| 100                   |  0                          |
+| 1,000                 |  0.09999996423721313                          |
+| 10,000                |  0.09999999403953552                          |
+| 100,000               |  0.3999999761581421                          |
+| 1,000,000             |  N/A                          |
+| 10,000,000            |  N/A                          |
 
 
 
@@ -35,7 +35,7 @@
 
 **According to your measurement results, what is the resolution of your `performance.now()`? In order to measure differences in time with `performance.now()``, approximately how many cache accesses need to be performed?**
 
-
+The resolution of `performance.now()` is the smallest measurable increment, which is approximately 0.1 ms. Around 1,000 cache accesses need to be performed to measure differences in time.
 
 
 ## 2-2
