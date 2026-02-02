@@ -1,5 +1,5 @@
 // P is the amount of time we spend counting in each interval (in ms)
-let P = 0.1; // The smallest time interval that we can measure with performance.now() in ms
+let P = 5; // The smallest time interval that we can measure with performance.now() in ms
 
 // Number of elements in your trace
 let K = 5 * 1000 / P; 

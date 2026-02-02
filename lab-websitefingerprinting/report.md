@@ -6,7 +6,7 @@
 
 - Browser: Chrome 143
 - CPU: Apple M1
-- Cache sizes: hw.l1dcachesize: 65536
+- Cache sizes: hw.l1dcachesize: 65536, hw.l2cachesize: 4194304
 - RAM: 16 GB
 - OS: MacOS (Catalina)
 
@@ -59,13 +59,32 @@ I used `N = 1,000` and `P = 0.1` as my parameters. I chose `N` based on the numb
 
 **Use the Python code we provided in Part 2.1 to analyze simple statistics (mean, median, etc.) on the traces from google.com and nytimes.com. Report the statistic numbers.**
 
+```
+Trace 0 (Label: https://www.google.com): Mean=50.95508, Median=47.0, StdDev=26.75408870048853
+Trace 1 (Label: https://www.google.com): Mean=50.7806, Median=47.0, StdDev=26.31701623740807
+Trace 2 (Label: https://www.google.com): Mean=55.1078, Median=52.0, StdDev=27.82295561510343
+Trace 3 (Label: https://www.google.com): Mean=55.30126, Median=52.0, StdDev=27.782945531609638
+Trace 4 (Label: https://www.nytimes.com): Mean=40.89368, Median=37.0, StdDev=23.84632751719989
+Trace 5 (Label: https://www.nytimes.com): Mean=40.49334, Median=37.0, StdDev=23.884342060111244
+Trace 6 (Label: https://www.nytimes.com): Mean=40.47006, Median=37.0, StdDev=23.6288041084685
+Trace 7 (Label: https://www.nytimes.com): Mean=31.61256, Median=29.0, StdDev=16.863415141850886
+```
 
 ## 2-6
 
 **Include your classification results in your report.**
 
 ```
+                                           precision    recall  f1-score   support
 
+                       https://www.ft.com       0.81      0.93      0.86        41
+                https://www.instagram.com       0.74      0.74      0.74        31
+https://www.nytimes.com/games/connections       0.97      0.72      0.83        47
+               https://www.wellsfargo.com       0.85      0.98      0.91        41
+
+                                 accuracy                           0.84       160
+                                macro avg       0.84      0.84      0.84       160
+                             weighted avg       0.85      0.84      0.84       160
 ```
 
 
