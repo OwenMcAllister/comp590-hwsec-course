@@ -95,7 +95,16 @@ https://www.nytimes.com/games/connections       0.97      0.72      0.83        
 **Include your new accuracy results for the modified attack code in your report.**
 
 ```
+                                           precision    recall  f1-score   support
 
+                       https://www.ft.com       0.76      0.85      0.80        41
+                https://www.instagram.com       0.94      0.94      0.94        31
+https://www.nytimes.com/games/connections       0.75      0.70      0.73        47
+               https://www.wellsfargo.com       0.85      0.80      0.82        41
+
+                                 accuracy                           0.81       160
+                                macro avg       0.82      0.82      0.82       160
+                             weighted avg       0.81      0.81      0.81       160
 ```
 
 
@@ -104,4 +113,6 @@ https://www.nytimes.com/games/connections       0.97      0.72      0.83        
 ## 3-3
 
 **Compare your accuracy numbers between Part 2 and 3. Does the accuracy decrease in Part 3? Do you think that our “cache-occupancy” attack actually exploits a cache side channel? If not, take a guess as to possible root causes of the modified attack.**
+
+The accuracy numbers in Part 3 only slightly decrease, dropping from 0.85 to 0.81. No, based on the similarity in accuracy of classification between the two versions, our attack likely does not exploit a cache side channel. Possible root causes of the modified attack point towards other operating system quirks as we are just counting the number of times the add operation is performed within a time window of length `P`. One such cause could be interrupts.
 
