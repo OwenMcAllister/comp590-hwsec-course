@@ -44,17 +44,20 @@ BuildVersion:		24G84
 
 | Number of Cache Lines | Median Access Latency (ms) |
 | --------------------- | -------------------------- |
-| 1                     |                            |
-| 10                    |                            |
-| 100                   |                            |
-| 1,000                 |                            |
-| 10,000                |                            |
-| 100,000               |                            |
-| 1,000,000             |                            |
-| 10,000,000            |                            |
+| 1                     | 0.0000ms                           |
+| 10                    | 0.0000ms                           |
+| 100                   | 0.0000ms                           |
+| 1,000                 | 0.0000ms                           |
+| 10,000                | 0.1000ms                           |
+| 100,000               | 0.2000ms                           |
+| 1,000,000             | 0.7000ms                           |
+| 10,000,000            | 4.9000ms                           |
 
+In the current approach, for each value of N, a single ``Float64Array(N * LINE_SIZE)`` is allocated once and then reused across all 10 measurement runs. This means every run operates on the same memory region. As a result, data that was brought into the cache during earlier runs may still remain there in later runs, leading to potential cache warm-up and reuse effects that influence the timing results.
 
+Implemented the region separation approach previously which allocated a much larger array ``Float64Array(runs * N * LINE_SIZE)``, and each run accessed a different slice of this array using a calculated base offset. Because the cache lines used in one run are different from those in another, cross-run cache reuse is minimized, and the timing measurements for each run become more isolated and independent. As the labs target is cache sweeping implemented the cache reuse. 
 
+In the reused-region method, the memory required is ``N * LINE_SIZE * 8 bytes``, since each element in a ``Float64Array`` occupies 8 bytes. In the region-separation method, the memory requirement becomes ``runs * N * LINE_SIZE * 8`` bytes, which is roughly 10 times larger when ``runs = 10``. For example, when ``N = 10,000,000`` and ``LINE_SIZE = 16``, the reused-region approach requires approximately ``10,000,000 × 16 × 8 = 1.28 GB`` of memory.
 
 ## 1-3
 
