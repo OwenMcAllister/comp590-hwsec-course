@@ -4,12 +4,12 @@ set -euo pipefail
 echo "=== System + Browser Report (macOS) ==="
 echo
 
-# --- OS ---
+# Operating System Information
 echo "[OS]"
 sw_vers
 echo
 
-# --- CPU ---
+# CPU Information
 echo "[CPU]"
 if sysctl -n machdep.cpu.brand_string >/dev/null 2>&1; then
   echo "CPU: $(sysctl -n machdep.cpu.brand_string)"
@@ -19,7 +19,7 @@ else
 fi
 echo
 
-# --- RAM ---
+# RAM Information
 echo "[RAM]"
 MEM_HUMAN="$(system_profiler SPHardwareDataType 2>/dev/null | awk -F': ' '/Memory:/ {print $2; exit}')"
 if [[ -n "${MEM_HUMAN:-}" ]]; then
@@ -32,7 +32,7 @@ else
 fi
 echo
 
-# --- Cache line size ---
+# Cache Line Size Information
 echo "[Cache line size]"
 if sysctl -n hw.cachelinesize >/dev/null 2>&1; then
   echo "Cache line size: $(sysctl -n hw.cachelinesize) bytes"
@@ -41,7 +41,7 @@ else
 fi
 echo
 
-# --- Cache sizes (classic sysctl keys) ---
+# Cache Sizes Information
 echo "[Cache sizes]"
 get_cache() {
   local key="$1"
@@ -63,7 +63,7 @@ get_cache hw.l1dcachesize
 get_cache hw.l2cachesize
 get_cache hw.l3cachesize
 
-# --- Apple Silicon perf level L2 caches (often present) ---
+# Apple Silicon perf-level caches (if available)
 if sysctl -n hw.perflevel0.l2cachesize >/dev/null 2>&1 || sysctl -n hw.perflevel1.l2cachesize >/dev/null 2>&1; then
   echo
   echo "[Apple Silicon perf-level L2 caches]"
@@ -72,7 +72,7 @@ if sysctl -n hw.perflevel0.l2cachesize >/dev/null 2>&1 || sysctl -n hw.perflevel
 fi
 echo
 
-# --- Browsers ---
+# Browser Versions
 echo "[Browser versions]"
 
 # Chrome

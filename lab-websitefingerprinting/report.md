@@ -4,11 +4,36 @@
 
 **Report your browser version, CPU type, cache size, RAM amount, and OS. We use this information to learn about the attack’s behavior on different machines.**
 
-- Browser:
-- CPU:
-- Cache sizes:
-- RAM:
-- OS:
+```
+[Browser versions]
+Chrome: Google Chrome 144.0.7559.110 
+Firefox: Mozilla Firefox 145.0.2
+Safari: 18.6
+
+[CPU]
+CPU: Apple M4
+
+[Cache line size]
+Cache line size: 128 bytes
+
+[Cache sizes]
+hw.l1icachesize: 131072 bytes
+hw.l1dcachesize: 65536 bytes
+hw.l2cachesize: 4194304 bytes
+hw.l3cachesize: (not reported)
+
+[Apple Silicon perf-level L2 caches]
+hw.perflevel0.l2cachesize: 16777216 bytes
+hw.perflevel1.l2cachesize: 4194304 bytes
+
+[RAM]
+RAM: 16 GB
+
+[OS]
+ProductName:		macOS
+ProductVersion:		15.6
+BuildVersion:		24G84
+```
 
 
 
