@@ -57,14 +57,13 @@ In the current approach, for each value of N, a single ``Float64Array(N * LINE_S
 
 Implemented the region separation approach previously which allocated a much larger array ``Float64Array(runs * N * LINE_SIZE)``, and each run accessed a different slice of this array using a calculated base offset. Because the cache lines used in one run are different from those in another, cross-run cache reuse is minimized, and the timing measurements for each run become more isolated and independent. As the labs target is cache sweeping implemented the cache reuse. 
 
-In the reused-region method, the memory required is ``N * LINE_SIZE * 8 bytes``, since each element in a ``Float64Array`` occupies 8 bytes. In the region-separation method, the memory requirement becomes ``runs * N * LINE_SIZE * 8`` bytes, which is roughly 10 times larger when ``runs = 10``. For example, when ``N = 10,000,000`` and ``LINE_SIZE = 16``, the reused-region approach requires approximately ``10,000,000 × 16 × 8 = 1.28 GB`` of memory.
+In the reused-region method, the memory required is ``N * LINE_SIZE * 8 bytes``, since each element in a ``Float64Array`` occupies 8 bytes. In the region-separation method, the memory requirement becomes ``runs * N * LINE_SIZE * 8`` bytes, which is roughly 10 times larger when ``runs = 10``. For example, when ``N = 10,000,000`` and ``LINE_SIZE = 16``, the reused-region approach requires approximately ``10,000,000 × 16 × 8 = 1.28 GB`` of memory. Region-separation ≈ 12.8 GB.
 
 ## 1-3
 
 **According to your measurement results, what is the resolution of your `performance.now()`? In order to measure differences in time with `performance.now()``, approximately how many cache accesses need to be performed?**
 
-
-
+From the results, I see that up to 1,000 cache-line accesses, ``performance.now()`` still shows 0.0000 ms. The first non-zero value appears around 10,000 accesses at about 0.1 ms. So on my machine, the effective resolution is roughly 0.1 ms, and I need around 10,000+ cache-line accesses to measure any meaningful timing difference.
 
 ## 2-2
 
