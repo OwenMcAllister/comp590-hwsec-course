@@ -54,16 +54,28 @@ function measureNLines() {
 
   // For each N in CACHE_LINE_COUNTS, measure access times
   for (const N of CACHE_LINE_COUNTS) {
-    // Create a Float64Array with N cache lines
+    // Single region; shuffle access order per run to reduce warm-up bias
     const M = new Float64Array(N * LINE_SIZE).fill(-1);
     const times = new Array(runs);
+    const indices = new Array(N);
+    for (let j = 0; j < N; j++) indices[j] = j;
 
     // repeat the measurement 'runs' times
     for (let i = 0; i < runs; i++) {
+      // Fisher–Yates shuffle of cache-line indices
+      // This ensures we access cache lines in a random order each run, preventing any warm-up 
+      // https://extremelearning.com.au/fisher-yates-algorithm/
+      for (let j = N - 1; j > 0; j--) {
+        const k = Math.floor(Math.random() * (j + 1));
+        const tmp = indices[j];
+        indices[j] = indices[k];
+        indices[k] = tmp;
+      }
       const start = performance.now();
 
       for (let j = 0; j < N; j++) {
-        let val = M[j * LINE_SIZE]; // Access first element of each cache line
+        const stride = indices[j] * LINE_SIZE;
+        let val = M[stride]; // Access first element of each cache line
       }
 
       const end = performance.now();
@@ -73,6 +85,7 @@ function measureNLines() {
     const median = getMedian(times);
 
     results.push({ N, times, median });
+    console.log(`Measured ${N} cache lines (median: ${median.toFixed(4)}ms)`);
   }
 
   return results;

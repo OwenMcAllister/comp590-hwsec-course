@@ -48,16 +48,30 @@ BuildVersion:		24G84
 | 10                    | 0.0000ms                           |
 | 100                   | 0.0000ms                           |
 | 1,000                 | 0.0000ms                           |
-| 10,000                | 0.1000ms                           |
-| 100,000               | 0.2000ms                           |
+| 10,000                | 0.0000ms                           |
+| 100,000               | 0.1000ms                           |
 | 1,000,000             | 0.7000ms                           |
-| 10,000,000            | 4.9000ms                           |
+| 10,000,000            | 7.4000ms                           |
 
-In the current approach, for each value of N, a single ``Float64Array(N * LINE_SIZE)`` is allocated once and then reused across all 10 measurement runs. This means every run operates on the same memory region. As a result, data that was brought into the cache during earlier runs may still remain there in later runs, leading to potential cache warm-up and reuse effects that influence the timing results.
+Region reuse was not used because accessing the same memory region in every run can introduce cache warm-up and reuse effects, which bias timing measurements across runs. Region separation, while reducing cache reuse, was also avoided because it requires memory proportional to `runs × N`, making it impractical for large values of `N`. Instead, a Fisher–Yates shuffle was used to randomize the cache-line access order for each run, minimizing cross-run cache reuse while keeping memory usage fixed and preserving the intended cache-sweeping behavior.
 
-Implemented the region separation approach previously which allocated a much larger array ``Float64Array(runs * N * LINE_SIZE)``, and each run accessed a different slice of this array using a calculated base offset. Because the cache lines used in one run are different from those in another, cross-run cache reuse is minimized, and the timing measurements for each run become more isolated and independent. As the labs target is cache sweeping implemented the cache reuse. 
+```
+N = 10,000,000, LINE_SIZE = 16, runs = 10, Float64 = 8 bytes
 
-In the reused-region method, the memory required is ``N * LINE_SIZE * 8 bytes``, since each element in a ``Float64Array`` occupies 8 bytes. In the region-separation method, the memory requirement becomes ``runs * N * LINE_SIZE * 8`` bytes, which is roughly 10 times larger when ``runs = 10``. For example, when ``N = 10,000,000`` and ``LINE_SIZE = 16``, the reused-region approach requires approximately ``10,000,000 × 16 × 8 = 1.28 GB`` of memory. Region-separation ≈ 12.8 GB.
+Region reuse
+= N × LINE_SIZE × 8 = 10,000,000 × 16 × 8 = 1,280,000,000 bytes
+≈ 1.28 GB  (≈ 1.192 GiB)
+
+Region separation
+= runs × N × LINE_SIZE × 8 = 10 × 10,000,000 × 16 × 8 = 12,800,000,000 bytes
+≈ 12.8 GB (≈ 11.921 GiB)
+
+Fisher–Yates shuffle
+Data array = N × LINE_SIZE × 8 = 1,280,000,000 bytes  (≈ 1.28 GB)
+Index array = N × 4 = 40,000,000 bytes    (≈ 0.04 GB)
+Total = 1,320,000,000 bytes ≈ 1.32 GB (≈ 1.229 GiB)
+```
+
 
 ## 1-3
 
