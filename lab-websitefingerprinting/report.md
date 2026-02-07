@@ -77,7 +77,9 @@ Total = 1,320,000,000 bytes ≈ 1.32 GB (≈ 1.229 GiB)
 
 **According to your measurement results, what is the resolution of your `performance.now()`? In order to measure differences in time with `performance.now()``, approximately how many cache accesses need to be performed?**
 
-From the results, I see that up to 1,000 cache-line accesses, ``performance.now()`` still shows 0.0000 ms. The first non-zero value appears around 10,000 accesses at about 0.1 ms. So on my machine, the effective resolution is roughly 0.1 ms, and I need around 10,000+ cache-line accesses to measure any meaningful timing difference.
+From the measurements, I observe that `performance.now()` reports 0.000 ms up to about 10,000 cache-line accesses. The first clearly non-zero timing appears at 100,000 accesses, around 0.1 ms, and the measured time then grows roughly proportionally (≈0.7 ms at 1,000,000 and ≈7.4 ms at 10,000,000). 
+
+Based on this, the effective timing resolution of performance.now() on my machine is about 0.1 ms. To reliably measure a difference in time using performance.now(), I need around ~100,000 accesses giving a stable, observable signal.
 
 ## 2-2
 
