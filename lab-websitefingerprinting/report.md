@@ -89,14 +89,10 @@ Based on this, the effective timing resolution of `performance.now()` on my mach
 - N (addresses per sweep): 100000 cache-line addresses
 - P (time window): 5 ms
 
-**How we choose `N`:**
-From our measurements, `performance.now()` stays at 0.000 ms up to about 10000 cache-line accesses, and the first clearly non-zero timing shows up around 100000 accesses (≈ 0.1 ms).
+**How we choose `N`:** From our measurements, `performance.now()` stays at 0.000 ms up to about 10000 cache-line accesses, and the first clearly non-zero timing shows up around 100000 accesses (≈ 0.1 ms).
 So we pick N = 100000 so that one sweep is long enough to reliably exceed the timer’s effective resolution and produce a stable, measurable signal.
 
-**Why we don't choose P larger or smaller**
-- If P is smaller (e.g., 2 ms): many windows contain too few sweeps (sometimes 0–1), so the count becomes noisy/jittery, making traces less consistent.
-- If P is larger (e.g., 10+ ms): we get fewer samples over time and the trace becomes over-smoothed, which blurs short-lived changes and reduces fingerprinting detail.
-So P = 5 ms is a good balance: stable sweep counts per window, but still fine-grained enough to keep useful temporal structure in the trace.
+We choose P = 5 ms as a balance between stability and temporal detail. Smaller windows produce noisy counts due to too few sweeps per window, while larger windows oversmooth the trace and hide short-lived variations. A 5 ms window provides consistent sweep counts while preserving useful timing structure.
 
 
 ## 2-3
@@ -153,13 +149,19 @@ https://www.facebook.com       0.93      1.00      0.96        40
 **Include your new accuracy results for the modified attack code in your report.**
 
 ```
+                          precision    recall  f1-score   support
 
+   https://www.baidu.com       1.00      0.97      0.99        40
+https://www.facebook.com       0.85      0.88      0.86        40
+  https://www.google.com       0.95      0.88      0.91        40
+ https://www.youtube.com       0.91      0.97      0.94        40
+
+                accuracy                           0.93       160
+               macro avg       0.93      0.93      0.93       160
+            weighted avg       0.93      0.93      0.93       160
 ```
-
-
-
 
 ## 3-3
 
 **Compare your accuracy numbers between Part 2 and 3. Does the accuracy decrease in Part 3? Do you think that our “cache-occupancy” attack actually exploits a cache side channel? If not, take a guess as to possible root causes of the modified attack.**
-
+The accuracy decreases in Part 3, dropping from 0.97 to 0.93. This decline indicates that the modified cache-occupancy attack is weaker and does not appear to be cleanly exploiting a strong cache side channel. Instead, the measurements likely capture coarser system effects, such as overall CPU activity and scheduling noise, rather than fine-grained cache behavior. Consistent with the findings of There’s Always a Bigger Fish (ISCA’22), a plausible root cause is that the attack primarily relies on interrupt-based timing effects, with cache activity playing only a secondary role.

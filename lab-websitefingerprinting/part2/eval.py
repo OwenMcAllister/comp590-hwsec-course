@@ -12,10 +12,6 @@ def eval():
     for i in range(10):
         ### TODO: Exercise 2-5
         
-        
-        
-        
-
         ### 1. Load data from traces file
         with open("traces.out", "r") as f:
             data = json.loads(f.read())
