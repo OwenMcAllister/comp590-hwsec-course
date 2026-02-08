@@ -89,7 +89,7 @@ Based on this, the effective timing resolution of `performance.now()` on my mach
 - N (addresses per sweep): 100000 cache-line addresses
 - P (time window): 5 ms
 
-**How we choose `N`**
+**How we choose `N`:**
 From our measurements, `performance.now()` stays at 0.000 ms up to about 10000 cache-line accesses, and the first clearly non-zero timing shows up around 100000 accesses (≈ 0.1 ms).
 So we pick N = 100000 so that one sweep is long enough to reliably exceed the timer’s effective resolution and produce a stable, measurable signal.
 
@@ -112,6 +112,19 @@ So P = 5 ms is a good balance: stable sweep counts per window, but still fine-gr
 
 **Use the Python code we provided in Part 2.1 to analyze simple statistics (mean, median, etc.) on the traces from google.com and nytimes.com. Report the statistic numbers.**
 
+```
+Trace Number ---- Domain ----- Samples ----- Mean ----- Median ------ StdDev ------ Min ------ Max
+1            ---- google.com ----- 1000    ----- 102.3180 ----- 104.0000 ------   6.4488 ------   9.0000 ------ 107.0000
+2            ---- google.com ----- 1000    ----- 102.9130 ----- 104.0000 ------   3.6947 ------  64.0000 ------ 107.0000
+3            ---- google.com ----- 1000    ----- 101.6170 ----- 103.0000 ------   5.0798 ------  -1.0000 ------ 107.0000
+4            ---- google.com ----- 1000    ----- 102.7380 ----- 104.0000 ------   3.7979 ------  67.0000 ------ 107.0000
+5            ---- google.com ----- 1000    ----- 102.8090 ----- 104.0000 ------   3.5740 ------  69.0000 ------ 107.0000
+6            ---- nytimes.com ----- 1000    -----  93.1780 -----  97.0000 ------  13.8365 ------  -1.0000 ------ 106.0000
+7            ---- nytimes.com ----- 1000    -----  94.5070 -----  97.0000 ------  11.1887 ------  -1.0000 ------ 107.0000
+8            ---- nytimes.com ----- 1000    -----  93.8100 -----  97.0000 ------  12.2725 ------  -1.0000 ------ 106.0000
+9            ---- nytimes.com ----- 1000    -----  64.8480 -----  68.0000 ------  10.1189 ------  -1.0000 ------  74.0000
+10           ---- nytimes.com ----- 1000    ----- 179.3520 ----- 184.5000 ------  19.2422 ------  86.0000 ------ 200.0000
+```
 
 
 
