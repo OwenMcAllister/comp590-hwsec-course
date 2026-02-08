@@ -164,4 +164,5 @@ https://www.facebook.com       0.85      0.88      0.86        40
 ## 3-3
 
 **Compare your accuracy numbers between Part 2 and 3. Does the accuracy decrease in Part 3? Do you think that our “cache-occupancy” attack actually exploits a cache side channel? If not, take a guess as to possible root causes of the modified attack.**
+
 The accuracy decreases in Part 3, dropping from 0.97 to 0.93. This decline indicates that the modified cache-occupancy attack is weaker and does not appear to be cleanly exploiting a strong cache side channel. Instead, the measurements likely capture coarser system effects, such as overall CPU activity and scheduling noise, rather than fine-grained cache behavior. Consistent with the findings of There’s Always a Bigger Fish (ISCA’22), a plausible root cause is that the attack primarily relies on interrupt-based timing effects, with cache activity playing only a secondary role.
