@@ -1,9 +1,9 @@
 // Number of sweep counts
 // TODO (Exercise 2-1): Choose an appropriate value!
-let P = 5;
+let P = 10;
 
 // Number of elements in your trace
-let K = 5 * 1000 / P; 
+let K = 5 * 1000 / P; // K = total recording time (5 seconds) / time per measurement (P ms)
 
 // Array of length K with your trace's values
 let T;
@@ -27,7 +27,7 @@ function record() {
   // 16 elements x 8 bytes = 128 bytes = 1 cache line (typical)
   // This spacing helps us jump accross cache lines, not stay in one
   const LINE_SIZE = 16; // 128/sizeof(double) Note that js treats all numbers as double
-  const size = 10000; // Number of cache lines to sweep
+  const size = 100000; // Number of cache lines to sweep
   const buffer = new Float64Array(size * LINE_SIZE); // Buffer to access
 
   while (performance.now() < endTime) {
