@@ -145,7 +145,7 @@ https://www.facebook.com       0.93      1.00      0.96        40
             weighted avg       0.98      0.97      0.97       160
 ```
 
-In my experiments, the alternative models (SVM, k‑NN, logistic regression, gradient boosting, and MLP) produced poor accuracy compared to the baseline Random Forest. The Random Forest performed best by a wide margin, and the current eval.py implementation achieves an accuracy of 0.97.
+**Optional:** In my experiments, the alternative models (SVM, k‑NN, logistic regression, gradient boosting, and MLP) produced poor accuracy compared to the baseline Random Forest. The Random Forest performed best by a wide margin, and the current eval.py implementation achieves an accuracy of 0.97.
 
 
 ## 3-2
