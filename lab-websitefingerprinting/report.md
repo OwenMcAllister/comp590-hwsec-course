@@ -133,10 +133,19 @@ Trace Number ---- Domain ----- Samples ----- Mean ----- Median ------ StdDev ---
 **Include your classification results in your report.**
 
 ```
+                          precision    recall  f1-score   support
 
+   https://www.baidu.com       1.00      0.93      0.96        40
+https://www.facebook.com       0.93      1.00      0.96        40
+  https://www.google.com       1.00      0.97      0.99        40
+ https://www.youtube.com       0.98      1.00      0.99        40
+
+                accuracy                           0.97       160
+               macro avg       0.98      0.97      0.97       160
+            weighted avg       0.98      0.97      0.97       160
 ```
 
-
+In my experiments, the alternative models (SVM, k‑NN, logistic regression, gradient boosting, and MLP) produced poor accuracy compared to the baseline Random Forest. The Random Forest performed best by a wide margin, and the current eval.py implementation achieves an accuracy of 0.97.
 
 
 ## 3-2

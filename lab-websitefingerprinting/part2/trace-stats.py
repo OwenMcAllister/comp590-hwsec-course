@@ -14,7 +14,7 @@ def domain_from_label(label: str) -> str:
     return host
 
 
-with open("traces.out", "r") as f:
+with open("traces4stats.out", "r") as f:
     data = json.loads(f.read())
 
     traces = np.array(data["traces"])
