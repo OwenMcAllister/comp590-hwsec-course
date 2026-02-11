@@ -1,3 +1,5 @@
+console.log("Hello World!");
+
 const runs = 10;
 
 function measureOneLine() {
@@ -19,7 +21,22 @@ function measureOneLine() {
 }
 
 function measureNLines() {
+  const LINE_SIZE = 16;
+  const N = 10000;
   let result = [];
+
+  const M = new Array(N * LINE_SIZE).fill(-1);
+
+  for (let i=0; i < runs; i++){
+    let sum = 0;
+    const start = performance.now();
+    for (let i=0; i < N; i++){
+      sum += M[i * LINE_SIZE];
+    }
+    const end = performance.now();
+    result.push(end - start);
+  }
+  
 
   // TODO: Exercise 1-1
 
