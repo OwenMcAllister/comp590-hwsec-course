@@ -1,0 +1,2 @@
+L2 vs. L3 Threshold: 125 ms
+L3 vs. DRAM Threshold: 250 ms

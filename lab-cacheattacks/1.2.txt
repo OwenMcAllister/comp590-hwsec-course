@@ -1,0 +1,22 @@
+Number of sets = (total cache size) / (cache line size * associativity)
+
+L1:
+Cache Line Size: 64 bytes
+Total Size: 32768
+Number of Ways (Associativity): 8
+Number of Sets: 64
+Raw Latency:
+
+L2:
+Cache Line Size: 64 bytes
+Total Size: 1048576 bytes
+Number of Ways (Associativity): 16
+Number of Sets: 1024
+Raw Latency:
+
+L3:
+Cache Line Size: 64 bytes
+Total Size: 11534336 bytes
+Number of Ways (Associativity): 11
+Number of Sets: 16384
+Raw Latency:
