@@ -18,7 +18,7 @@
 #define ALIGN_CYCLES 500000000ULL // Align both processes to the same cycle (give enough time for both to start up)
 
 // Calibrate: print raw probe times before setting this
-#define DATA_THRESHOLD (250ULL * L2_WAYS) // Threshold for bit 1 vs. 0
+#define DATA_THRESHOLD 1900ULL
 
 static inline uint64_t now_cycles()
 {
@@ -92,7 +92,6 @@ int main(int argc, char **argv)
 
 	printf("Receiver listening.\n");
 
-	// Calibration: print cold vs warm access times
 	printf("=== CALIBRATION ===\n");
 	for (int bit = 0; bit < NUM_BITS; bit++)
 	{
@@ -100,11 +99,14 @@ int main(int argc, char **argv)
 		prime_set(buf, DATA_SET_BASE + bit);
 		uint64_t warm = probe_set(buf, DATA_SET_BASE + bit);
 
-		// Evict it manually using clflush
-		for (int way = 0; way < L2_WAYS; way++)
+		// Evict it using multi-pass eviction on the same buffer
+		for (int pass = 0; pass < 3; pass++)
 		{
-			size_t offset = (size_t)way * SET_SPAN + (size_t)bit * LINE_SIZE;
-			asm volatile("clflush (%0)" :: "r"((char *)buf + offset) : "memory");
+			for (int way = 0; way < L2_WAYS; way++)
+			{
+				size_t offset = (size_t)way * SET_SPAN + (size_t)(DATA_SET_BASE + bit) * LINE_SIZE;
+				volatile char tmp = *((volatile char *)buf + offset + SET_SPAN * L2_WAYS); // use a different region of the same buffer to evict
+			}
 		}
 		asm volatile("mfence" ::: "memory");
 		uint64_t cold = probe_set(buf, DATA_SET_BASE + bit);

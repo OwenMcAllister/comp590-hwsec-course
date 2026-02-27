@@ -24,10 +24,13 @@ static inline uint64_t now_cycles()
 static inline void evict_set(void *buf, int set)
 { // Access all lines in the given set to evict it
   volatile char tmp;
-  for (int way = 0; way < L2_WAYS; way++)
+  for (int pass = 0; pass < 3; pass++)
   {
-    size_t offset = (size_t)way * SET_SPAN + (size_t)set * LINE_SIZE;
-    tmp = *((volatile char *)buf + offset);
+    for (int way = 0; way < L2_WAYS; way++)
+    {
+      size_t offset = (size_t)way * SET_SPAN + (size_t)set * LINE_SIZE;
+      tmp = *((volatile char *)buf + offset);
+    }
   }
   // asm volatile("" ::: "memory"); // Ensure all memory operations have completed before moving on
 }
