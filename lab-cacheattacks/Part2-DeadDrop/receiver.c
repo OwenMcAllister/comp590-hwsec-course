@@ -18,13 +18,13 @@
 #define ALIGN_CYCLES 500000000ULL // Align both processes to the same cycle (give enough time for both to start up)
 
 // Calibrate: print raw probe times before setting this
-#define DATA_THRESHOLD (100ULL * L2_WAYS) // Threshold for bit 1 vs. 0
+#define DATA_THRESHOLD (250ULL * L2_WAYS) // Threshold for bit 1 vs. 0
 
 static inline uint64_t now_cycles()
-{ // Returns the current time in CPU cycles
-	unsigned int aux;
-	asm volatile("rdtscp" : "=a"(aux) :: "rcx", "rdx");
-	return aux;
+{
+    uint32_t lo, hi;
+    asm volatile("rdtscp" : "=a"(lo), "=d"(hi) :: "rcx");
+    return ((uint64_t)hi << 32) | lo;
 }
 
 static inline void prime_set(void *buf, int set)
@@ -62,6 +62,13 @@ int main(int argc, char **argv)
 		exit(EXIT_FAILURE);
 	}
 
+	for (int bit = 0; bit < NUM_BITS; bit++)
+	{
+		uintptr_t addr = (uintptr_t)buf + (size_t)(DATA_SET_BASE + bit) * LINE_SIZE;
+		int set_index = (addr >> 6) & (L2_SETS - 1); // bits [15:6]
+		printf("bit %d -> virtual addr 0x%lx -> set index %d\n", bit, addr, set_index);
+	}
+
 	// Warm all pages to ensure they are mapped in and to avoid page faults during the timing loop
 	for (size_t i = 0; i < BUFF_SIZE; i += LINE_SIZE)
 	{
@@ -85,6 +92,27 @@ int main(int argc, char **argv)
 
 	printf("Receiver listening.\n");
 
+	// Calibration: print cold vs warm access times
+	printf("=== CALIBRATION ===\n");
+	for (int bit = 0; bit < NUM_BITS; bit++)
+	{
+		// Warm it
+		prime_set(buf, DATA_SET_BASE + bit);
+		uint64_t warm = probe_set(buf, DATA_SET_BASE + bit);
+
+		// Evict it manually using clflush
+		for (int way = 0; way < L2_WAYS; way++)
+		{
+			size_t offset = (size_t)way * SET_SPAN + (size_t)bit * LINE_SIZE;
+			asm volatile("clflush (%0)" :: "r"((char *)buf + offset) : "memory");
+		}
+		asm volatile("mfence" ::: "memory");
+		uint64_t cold = probe_set(buf, DATA_SET_BASE + bit);
+
+		printf("bit %d: warm = %lu, cold = %lu\n", bit, warm, cold);
+	}
+	printf("===================\n");
+
 	while (1)
 	{
 		uint64_t window_start = now_cycles();
@@ -97,10 +125,16 @@ int main(int argc, char **argv)
 			prime_set(buf, DATA_SET_BASE + bit);
 		}
 
-		// Wait for midpoint
+		// Wait for midpoint (sender begins evicting after this)
 		while (now_cycles() < midpoint)
 		{
-			asm volatile("lfence" ::: "memory"); // lfence() to prevent out-of-order execution from affecting our timing
+			asm volatile("lfence" ::: "memory");
+		}
+
+		// Wait for near window end so sender has had full second half to evict
+		while (now_cycles() < window_end - 50000ULL)
+		{
+			asm volatile("lfence" ::: "memory");
 		}
 
 		// Probe all data sets
@@ -108,6 +142,7 @@ int main(int argc, char **argv)
 		for (int bit = 0; bit < NUM_BITS; bit++)
 		{
 			uint64_t t = probe_set(buf, DATA_SET_BASE + bit);
+			printf("  bit %d: probe time = %lu (threshold = %llu) -> %s\n", bit, t, DATA_THRESHOLD, t > DATA_THRESHOLD ? "1" : "0");
 			if (t > DATA_THRESHOLD)
 			{
 				result |= (1 << bit);
@@ -116,7 +151,7 @@ int main(int argc, char **argv)
 
 		if (result != 0)
 		{
-			printf("Received: %c (0x%02x)\n", (char)result, result);
+			printf("Received: %d (0x%02x)\n", result, result);
 		}
 
 		// Wait for window end
@@ -124,6 +159,7 @@ int main(int argc, char **argv)
 		{
 			asm volatile("lfence" ::: "memory"); // lfence() to prevent out-of-order execution from affecting our timing
 		}
+
 	}
 
 	return 0;

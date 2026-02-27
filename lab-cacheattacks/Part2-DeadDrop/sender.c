@@ -15,10 +15,10 @@
 #define ALIGN_CYCLES 500000000ULL // Align both processes to the same cycle (give enough time for both to start up)
 
 static inline uint64_t now_cycles()
-{ // Returns the current time in CPU cycles
-  unsigned int aux;
-  asm volatile("rdtscp" : "=a"(aux) :: "rcx", "rdx");
-  return aux;
+{
+    uint32_t lo, hi;
+    asm volatile("rdtscp" : "=a"(lo), "=d"(hi) :: "rcx");
+    return ((uint64_t)hi << 32) | lo;
 }
 
 static inline void evict_set(void *buf, int set)
@@ -44,6 +44,13 @@ int main(int argc, char **argv)
     exit(EXIT_FAILURE);
   }
 
+  for (int bit = 0; bit < NUM_BITS; bit++)
+  {
+      uintptr_t addr = (uintptr_t)buf + (size_t)(DATA_SET_BASE + bit) * LINE_SIZE;
+      int set_index = (addr >> 6) & (L2_SETS - 1); // bits [15:6]
+      printf("bit %d -> virtual addr 0x%lx -> set index %d\n", bit, addr, set_index);
+  }
+
   // Warm all pages to ensure they are mapped in and to avoid page faults during the timing loop
   for (size_t i = 0; i < BUFF_SIZE; i += LINE_SIZE)
   {
@@ -60,47 +67,35 @@ int main(int argc, char **argv)
   }
 
   printf("Please type a message.\n");
-  
+  char text_buf[128];
+  fgets(text_buf, sizeof(text_buf), stdin);
+  unsigned char ch = (unsigned char)atoi(text_buf);
+
   while (1)
   {
-    char text_buf[128];
-    fgets(text_buf, sizeof(text_buf), stdin);
+    uint64_t window_start = now_cycles();
+    uint64_t midpoint = window_start + WINDOW_CYCLES / 2;
+    uint64_t window_end = window_start + WINDOW_CYCLES;
 
-    int num = string_to_int(text_buf);
-
-    char ch = (char)num;
-    char input_str[2] = {ch, '\0'};
-    char *binary = string_to_binary(input_str);
-    int binary_len = strlen(binary);
-
-    for (int bi = 0; bi < binary_len; bi++)
+    // First half: idle — let the receiver prime all sets
+    while (now_cycles() < midpoint)
     {
-      printf("Sending bit %d/%d: %c\n", bi + 1, binary_len, binary[bi]);
-      char bit_char = binary[bi];
-      int bit = (bit_char == '1') ? 1 : 0;
-
-      uint64_t window_start = now_cycles();
-      uint64_t midpoint = window_start + WINDOW_CYCLES / 2;
-      uint64_t window_end = window_start + WINDOW_CYCLES;
-
-      // First half: idle, let receiver prime
-      while (now_cycles() < midpoint)
-      {
-        asm volatile("lfence" ::: "memory");
-      }
-
-      // Second half: repeatedly evict if bit is 1
-      while (now_cycles() < window_end)
-      {
-        if (bit)
-        {
-          evict_set(buf, DATA_SET_BASE);
-        }
-        asm volatile("lfence" ::: "memory");
-      }
+      asm volatile("lfence" ::: "memory");
     }
 
-    free(binary);
+    // Second half: evict set i iff bit i is 1, repeat until window ends
+    while (now_cycles() < window_end)
+    {
+      for (int bit = 0; bit < NUM_BITS; bit++)
+      {
+        if (ch & (1 << bit))
+        {
+          printf("  evicting set %d (bit %d = 1)\n", DATA_SET_BASE + bit, bit);
+          evict_set(buf, DATA_SET_BASE + bit);
+        }
+      }
+      asm volatile("lfence" ::: "memory");
+    }
   }
 
   return 0;
