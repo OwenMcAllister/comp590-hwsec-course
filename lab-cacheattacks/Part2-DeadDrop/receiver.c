@@ -14,11 +14,16 @@
 #define BUFF_SIZE (SET_SPAN * L2_WAYS)
 #define DATA_SET_BASE 256 // We start at set 256 to avoid conflicts with the receiver's priming of the first 256 sets for synchronization
 
-#define WINDOW_CYCLES 5000000ULL  // How long the receiver waits for the sender to prime
-#define ALIGN_CYCLES 500000000ULL // Align both processes to the same cycle (give enough time for both to start up)
+// Slot timing in cycles. Receiver does repeated prime/probe rounds per slot and votes.
+#define SLOT_CYCLES 5000000ULL
+#define ROUND_GAP_CYCLES 90000ULL
+#define MIN_ROUNDS_PER_SLOT 7
 
 // Calibrate: print raw probe times before setting this
 #define DATA_THRESHOLD 1900ULL
+#define CONFIDENCE_THRESHOLD 300
+
+static const int bit_order[NUM_BITS] = {0, 5, 2, 7, 1, 6, 3, 4};
 
 static inline uint64_t now_cycles()
 {
@@ -30,8 +35,9 @@ static inline uint64_t now_cycles()
 static inline void prime_set(void *buf, int set)
 { // Access all lines in the given set to prime it
 	volatile char tmp;
-	for (int way = 0; way < L2_WAYS; way++)
+	for (int k = 0; k < L2_WAYS; k++)
 	{
+		int way = (k * 9 + 3) & (L2_WAYS - 1); // Access in a pseudo-random order to better utilize the cache and avoid prefetcher optimizations
 		size_t offset = (size_t)way * SET_SPAN + (size_t)set * LINE_SIZE;
 		tmp = *((volatile char *)buf + offset);
 	}
@@ -41,8 +47,9 @@ static inline void prime_set(void *buf, int set)
 static inline uint64_t probe_set(void *buf, int set)
 { // Measure the total access time for all lines in the given set
 	uint64_t total = 0;
-	for (int way = 0; way < L2_WAYS; way++)
+	for (int k = 0; k < L2_WAYS; k++)
 	{
+		int way = ((L2_WAYS - 1 - k) * 11 + 1) & (L2_WAYS - 1);
 		size_t offset = (size_t)way * SET_SPAN + (size_t)set * LINE_SIZE;
 		total += measure_one_block_access_time(
 			(uint64_t)((char *)buf + offset));
@@ -76,15 +83,6 @@ int main(int argc, char **argv)
 	}
 	// asm volatile("" ::: "memory"); // Ensure all memory operations have completed before moving on
 
-	// We make sure both processes start at the same time by aligning to a future cycle boundary. This helps ensure the sender is priming during the receiver's measurement window.
-	uint64_t now = now_cycles();
-	uint64_t T0 = (now / ALIGN_CYCLES + 2ULL) * ALIGN_CYCLES;
-	printf("T0: %lu cycles\n", T0);
-	printf("now: %lu cycles\n", now);
-	while (now_cycles() < T0)
-	{
-	}
-
 	printf("Please press enter.\n");
 
 	char text_buf[2];
@@ -115,53 +113,75 @@ int main(int argc, char **argv)
 	}
 	printf("===================\n");
 
+	int last_result = -1;
 	while (1)
 	{
-		uint64_t window_start = now_cycles();
-		uint64_t midpoint = window_start + WINDOW_CYCLES / 2;
-		uint64_t window_end = window_start + WINDOW_CYCLES;
+		int votes[NUM_BITS] = {0};
+		int rounds = 0;
+		uint64_t slot_start = now_cycles();
+		uint64_t slot_end = slot_start + SLOT_CYCLES;
 
-		// First half: prime all data sets
-		for (int bit = 0; bit < NUM_BITS; bit++)
+		while (now_cycles() + ROUND_GAP_CYCLES < slot_end)
 		{
-			prime_set(buf, DATA_SET_BASE + bit);
-		}
+			int direction = (rounds & 1);
 
-		// Wait for midpoint (sender begins evicting after this)
-		while (now_cycles() < midpoint)
-		{
-			asm volatile("lfence" ::: "memory");
-		}
-
-		// Wait for near window end so sender has had full second half to evict
-		while (now_cycles() < window_end - 50000ULL)
-		{
-			asm volatile("lfence" ::: "memory");
-		}
-
-		// Probe all data sets
-		int result = 0;
-		for (int bit = 0; bit < NUM_BITS; bit++)
-		{
-			uint64_t t = probe_set(buf, DATA_SET_BASE + bit);
-			printf("  bit %d: probe time = %lu (threshold = %llu) -> %s\n", bit, t, DATA_THRESHOLD, t > DATA_THRESHOLD ? "1" : "0");
-			if (t > DATA_THRESHOLD)
+			// Prime all data sets in one direction.
+			for (int i = 0; i < NUM_BITS; i++)
 			{
-				result |= (1 << bit);
+				int idx = direction ? (NUM_BITS - 1 - i) : i;
+				int bit = bit_order[idx]; // Access bits in a pseudo-random order to reduce predictability and self-thrashing
+				prime_set(buf, DATA_SET_BASE + bit);
+			}
+
+			uint64_t target = now_cycles() + ROUND_GAP_CYCLES;
+			while (now_cycles() < target)
+			{
+				asm volatile("lfence" ::: "memory");
+			}
+
+			// Probe in reverse direction to reduce self-thrashing.
+			for (int i = 0; i < NUM_BITS; i++)
+			{
+				int idx = direction ? i : (NUM_BITS - 1 - i);
+				int bit = bit_order[idx];
+				uint64_t t = probe_set(buf, DATA_SET_BASE + bit);
+				if (t > DATA_THRESHOLD)
+				{
+					votes[bit] += 1;
+				}
+				else
+				{
+					votes[bit] -= 1;
+				}
+			}
+
+			rounds++;
+		}
+
+		if (rounds >= MIN_ROUNDS_PER_SLOT)
+		{
+			int result = 0;
+			int confidence = 0;
+			for (int bit = 0; bit < NUM_BITS; bit++)
+			{
+				if (votes[bit] > 0)
+				{
+					result |= (1 << bit);
+				}
+				confidence += (votes[bit] >= 0) ? votes[bit] : -votes[bit];
+			}
+
+			if (result != last_result && confidence > CONFIDENCE_THRESHOLD)
+			{
+				printf("Received: %d (0x%02x), rounds=%d, confidence=%d\n", result, result, rounds, confidence);
+				last_result = result;
 			}
 		}
 
-		if (result != 0)
+		while (now_cycles() < slot_end)
 		{
-			printf("Received: %d (0x%02x)\n", result, result);
+			asm volatile("lfence" ::: "memory");
 		}
-
-		// Wait for window end
-		while (now_cycles() < window_end)
-		{
-			asm volatile("lfence" ::: "memory"); // lfence() to prevent out-of-order execution from affecting our timing
-		}
-
 	}
 
 	return 0;
