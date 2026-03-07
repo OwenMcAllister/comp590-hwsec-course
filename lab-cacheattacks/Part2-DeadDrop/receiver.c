@@ -20,7 +20,7 @@
 #define MIN_ROUNDS_PER_SLOT 7
 
 // Calibrate: print raw probe times before setting this
-#define DATA_THRESHOLD 1900ULL
+#define DATA_THRESHOLD 2000ULL
 #define CONFIDENCE_THRESHOLD 300
 
 static const int bit_order[NUM_BITS] = {0, 5, 2, 7, 1, 6, 3, 4};
@@ -69,12 +69,12 @@ int main(int argc, char **argv)
 		exit(EXIT_FAILURE);
 	}
 
-	for (int bit = 0; bit < NUM_BITS; bit++)
-	{
-		uintptr_t addr = (uintptr_t)buf + (size_t)(DATA_SET_BASE + bit) * LINE_SIZE;
-		int set_index = (addr >> 6) & (L2_SETS - 1); // bits [15:6]
-		printf("bit %d -> virtual addr 0x%lx -> set index %d\n", bit, addr, set_index);
-	}
+	// for (int bit = 0; bit < NUM_BITS; bit++)
+	// {
+	// 	uintptr_t addr = (uintptr_t)buf + (size_t)(DATA_SET_BASE + bit) * LINE_SIZE;
+	// 	int set_index = (addr >> 6) & (L2_SETS - 1); // bits [15:6]
+	// 	printf("bit %d -> virtual addr 0x%lx -> set index %d\n", bit, addr, set_index);
+	// }
 
 	// Warm all pages to ensure they are mapped in and to avoid page faults during the timing loop
 	for (size_t i = 0; i < BUFF_SIZE; i += LINE_SIZE)
@@ -88,30 +88,30 @@ int main(int argc, char **argv)
 	char text_buf[2];
 	fgets(text_buf, sizeof(text_buf), stdin);
 
-	printf("Receiver listening.\n");
+	printf("Receiver now listening.\n");
 
-	printf("=== CALIBRATION ===\n");
-	for (int bit = 0; bit < NUM_BITS; bit++)
-	{
-		// Warm it
-		prime_set(buf, DATA_SET_BASE + bit);
-		uint64_t warm = probe_set(buf, DATA_SET_BASE + bit);
+	// printf("=== CALIBRATION ===\n");
+	// for (int bit = 0; bit < NUM_BITS; bit++)
+	// {
+	// 	// Warm it
+	// 	prime_set(buf, DATA_SET_BASE + bit);
+	// 	uint64_t warm = probe_set(buf, DATA_SET_BASE + bit);
 
-		// Evict it using multi-pass eviction on the same buffer
-		for (int pass = 0; pass < 3; pass++)
-		{
-			for (int way = 0; way < L2_WAYS; way++)
-			{
-				size_t offset = (size_t)way * SET_SPAN + (size_t)(DATA_SET_BASE + bit) * LINE_SIZE;
-				volatile char tmp = *((volatile char *)buf + offset + SET_SPAN * L2_WAYS); // use a different region of the same buffer to evict
-			}
-		}
-		asm volatile("mfence" ::: "memory");
-		uint64_t cold = probe_set(buf, DATA_SET_BASE + bit);
+	// 	// Evict it using multi-pass eviction on the same buffer
+	// 	for (int pass = 0; pass < 3; pass++)
+	// 	{
+	// 		for (int way = 0; way < L2_WAYS; way++)
+	// 		{
+	// 			size_t offset = (size_t)way * SET_SPAN + (size_t)(DATA_SET_BASE + bit) * LINE_SIZE;
+	// 			volatile char tmp = *((volatile char *)buf + offset + SET_SPAN * L2_WAYS); // use a different region of the same buffer to evict
+	// 		}
+	// 	}
+	// 	asm volatile("mfence" ::: "memory");
+	// 	uint64_t cold = probe_set(buf, DATA_SET_BASE + bit);
 
-		printf("bit %d: warm = %lu, cold = %lu\n", bit, warm, cold);
-	}
-	printf("===================\n");
+	// 	printf("bit %d: warm = %lu, cold = %lu\n", bit, warm, cold);
+	// }
+	// printf("===================\n");
 
 	int last_result = -1;
 	while (1)
@@ -133,7 +133,7 @@ int main(int argc, char **argv)
 				prime_set(buf, DATA_SET_BASE + bit);
 			}
 
-			uint64_t target = now_cycles() + ROUND_GAP_CYCLES;
+			uint64_t target = now_cycles() + ROUND_GAP_CYCLES; // Wait for sender to finish evicting
 			while (now_cycles() < target)
 			{
 				asm volatile("lfence" ::: "memory");
@@ -160,21 +160,21 @@ int main(int argc, char **argv)
 
 		if (rounds >= MIN_ROUNDS_PER_SLOT)
 		{
-			int result = 0;
+			int result = 0; // The received value
 			int confidence = 0;
 			for (int bit = 0; bit < NUM_BITS; bit++)
 			{
 				if (votes[bit] > 0)
 				{
-					result |= (1 << bit);
+					result |= (1 << bit); // Set the bit if we have more "hits" than "misses"
 				}
-				confidence += (votes[bit] >= 0) ? votes[bit] : -votes[bit];
+				confidence += (votes[bit] >= 0) ? votes[bit] : -votes[bit]; // Confidence is the total number of votes for the winning side (hits or misses) across all bits
 			}
 
 			if (result != last_result && confidence > CONFIDENCE_THRESHOLD)
 			{
-				printf("Received: %d (0x%02x), rounds=%d, confidence=%d\n", result, result, rounds, confidence);
-				last_result = result;
+				printf("%d\n", result);
+				break;
 			}
 		}
 

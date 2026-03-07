@@ -50,12 +50,12 @@ int main(int argc, char **argv)
     exit(EXIT_FAILURE);
   }
 
-  for (int bit = 0; bit < NUM_BITS; bit++)
-  {
-      uintptr_t addr = (uintptr_t)buf + (size_t)(DATA_SET_BASE + bit) * LINE_SIZE;
-      int set_index = (addr >> 6) & (L2_SETS - 1); // bits [15:6]
-      printf("bit %d -> virtual addr 0x%lx -> set index %d\n", bit, addr, set_index);
-  }
+  // for (int bit = 0; bit < NUM_BITS; bit++)
+  // {
+  //     uintptr_t addr = (uintptr_t)buf + (size_t)(DATA_SET_BASE + bit) * LINE_SIZE;
+  //     int set_index = (addr >> 6) & (L2_SETS - 1); // bits [15:6]
+  //     printf("bit %d -> virtual addr 0x%lx -> set index %d\n", bit, addr, set_index);
+  // }
 
   // Warm all pages to ensure they are mapped in and to avoid page faults during the timing loop
   for (size_t i = 0; i < BUFF_SIZE; i += LINE_SIZE)
@@ -69,7 +69,7 @@ int main(int argc, char **argv)
   fgets(text_buf, sizeof(text_buf), stdin);
   unsigned char ch = (unsigned char)atoi(text_buf);
 
-  printf("Sender transmitting value %u (0x%02x) in repeated slots.\n", ch, ch);
+  // printf("Sender transmitting value %u (0x%02x) in repeated slots.\n", ch, ch);
 
   while (1)
   {
