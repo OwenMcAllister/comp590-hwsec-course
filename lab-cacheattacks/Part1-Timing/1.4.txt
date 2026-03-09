@@ -1,0 +1,7 @@
+From 1.2.txt, cache line size = 64 Bytes.
+
+L2 cache lines needed:
+1 MB / 64 B = (1 * 1024 * 1024) / 64 = 16384 lines
+
+L3 cache lines needed:
+11 MB / 64 B = (11 * 1024 * 1024) / 64 = 180224 lines
