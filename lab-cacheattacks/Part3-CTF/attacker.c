@@ -225,6 +225,11 @@ int main(int argc, char **argv)
 
             printf("-------------------------------------------------\n");
 
+            if (epoch == 20) {
+                printf("\n=== Final candidate set: %d ===\n", candidate_set);
+                break;
+            }
+
             memset(accum,  0, L2_SETS * sizeof(uint64_t));
             memset(count,  0, L2_SETS * sizeof(uint64_t));
             memset(misses, 0, L2_SETS * sizeof(uint64_t));
