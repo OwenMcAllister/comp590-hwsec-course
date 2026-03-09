@@ -1,9 +1,9 @@
 #include "utility.h"
 
 // TODO: Uncomment the following lines and fill in the correct size
-//#define L1_SIZE [TODO]
-//#define L2_SIZE [TODO]
-//#define L3_SIZE [TODO]
+#define L1_SIZE 32768
+#define L2_SIZE 1048576
+#define L3_SIZE 11534336
  
 int main (int ac, char **av) {
 
@@ -47,21 +47,65 @@ int main (int ac, char **av) {
     // ======
     //
 
+    for (int i=0; i<SAMPLES; i++) {
+	    //flush the cache to make sure we are reading from memory
+	    clflush(target_buffer);
+	    
+	    dram_latency[i] = measure_one_block_access_time((uint64_t)target_buffer);
+    }
     // ======
     // [1.2] TODO: Measure L2 Latency, store results in l2_latency array
     // ======
     //
+    // Create L1 eviction buffer
+    uint64_t *l1_eviction_buffer = (uint64_t *)malloc(8 * L1_SIZE + 8);
 
+    for (int i=0; i<SAMPLES; i++) {
+	// Bring target cache line into L1
+    	tmp = target_buffer[0];
+	// Evict target by accessing an L1 Cache size buffer (now in L2)
+    	for (int sweep = 0; sweep < 8; sweep++) {
+
+		for (int j=0; j<(8 * L1_SIZE) / sizeof(uint64_t); j+=8) {
+			tmp^= l1_eviction_buffer[j];
+    		}
+	}
+    	// Measure the latency
+	l2_latency[i] = measure_one_block_access_time((uint64_t)target_buffer);
+    }
     // ======
     // [1.2] TODO: Measure L3 Latency, store results in l3_latency array
     // ======
     //
+    // Create L2 eviction buffer
+    uint64_t *l2_eviction_buffer = (uint64_t *)malloc(8 * L2_SIZE + 8);
 
+    for (int i=0; i<SAMPLES; i++) {
+	    // Bring target cache line into L1
+	    tmp = target_buffer[0];
+
+	    for (int sweep = 0; sweep < 8; sweep++){
+	    	// Evict target by accessing an L1 Cache size buffer (now in L2)
+    	    	for (int j=0; j<(8 * L1_SIZE) / sizeof(uint64_t); j+=8) {
+            		tmp^= l1_eviction_buffer[j];
+	    	}
+	    }
+
+	    for (int sweep = 0; sweep < 8; sweep++){
+	    	// Evict target by accessing an L2 Cache size buffer (now in L3)
+	    	for (int j=0; j<(8 * L2_SIZE) / sizeof(uint64_t); j+=8) {
+			tmp^= l2_eviction_buffer[j];
+	    	}
+	    }
+
+	    // Measure the latency
+	    l3_latency[i] = measure_one_block_access_time((uint64_t)target_buffer);
+    }
 
     // Print the results to the screen
     // [1.5] Change print_results to print_results_for_python so that your code will work
     // with the python plotter software
-    print_results(dram_latency, l1_latency, l2_latency, l3_latency);
+    print_results_for_python(dram_latency, l1_latency, l2_latency, l3_latency);
 
     free(target_buffer);
 
@@ -69,4 +113,8 @@ int main (int ac, char **av) {
     //free(eviction_buffer);
     return 0;
 }
+
+
+
+
 
