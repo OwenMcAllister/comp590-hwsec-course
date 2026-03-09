@@ -22,28 +22,47 @@ static inline double my_sqrt(double x)
 
 #define REPORT_INTERVAL_CYCLES 600000000ULL
 #define MISS_THRESHOLD_CYCLES  80ULL
+#define PROBE_GAP_CYCLES       20000ULL
 
 #define RATIO_MIN      20ULL
 #define RATIO_MAX      250ULL
+#define TOP_N          30
+#define LEADERBOARD_N  10
 
-// How many sets either side to check for co-appearance (buffer self-collisions
-// tend to be consecutive or fixed-stride sets that always appear together).
 #define NEIGHBOR_WINDOW  4
 
-// Score = appearances * APPEAR_WEIGHT
-//       - ratio_stddev * RATIO_STDDEV_W
-//       - neighbor_score * NEIGHBOR_W
-// neighbor_score = sum of appearances of sets within NEIGHBOR_WINDOW of this set.
-// A lone victim set has low neighbor_score; buffer aliases cluster together.
+// Score = appearances  * APPEAR_WEIGHT
+//       - ratio_mean   * RATIO_MEAN_W    (lower cyc/miss = more complete eviction = victim)
+//       - ratio_stddev * RATIO_STDDEV_W  (stable ratio = consistent victim access pattern)
+//       - neighbor_app * NEIGHBOR_W      (isolated set = not a buffer alias cluster)
 #define APPEAR_WEIGHT   10.0
+#define RATIO_MEAN_W     0.5
 #define RATIO_STDDEV_W   1.0
-#define NEIGHBOR_W       0.5
+#define NEIGHBOR_W       5.0
 
 static inline uint64_t now_cycles(void)
 {
     uint32_t lo, hi;
     asm volatile("rdtscp" : "=a"(lo), "=d"(hi) :: "rcx");
     return ((uint64_t)hi << 32) | lo;
+}
+
+static inline uint64_t neighbor_appearances(const uint64_t *appearances, int set)
+{
+    uint64_t neighbor_app = 0;
+    for (int d = -NEIGHBOR_WINDOW; d <= NEIGHBOR_WINDOW; d++) {
+        if (d == 0) continue;
+        int nb = set + d;
+        if (nb < 0 || nb >= L2_SETS) continue;
+        neighbor_app += appearances[nb];
+    }
+    return neighbor_app;
+}
+
+static inline double ratio_stddev(const double *ratio_M2, const uint64_t *epoch_n, int set)
+{
+    double n = (double)epoch_n[set];
+    return n > 1.0 ? my_sqrt(ratio_M2[set] / (n - 1.0)) : 0.0;
 }
 
 static inline void prime_set(void *buf, int set)
@@ -72,6 +91,8 @@ static inline uint64_t probe_set(void *buf, int set, int *miss_count_out)
 
 int main(int argc, char **argv)
 {
+    (void)argc; (void)argv;
+
     void *buf = mmap(NULL, BUFF_SIZE, PROT_READ | PROT_WRITE,
                      MAP_POPULATE | MAP_ANONYMOUS | MAP_PRIVATE | MAP_HUGETLB,
                      -1, 0);
@@ -87,7 +108,6 @@ int main(int argc, char **argv)
     uint64_t *count       = calloc(L2_SETS, sizeof(uint64_t));
     uint64_t *misses      = calloc(L2_SETS, sizeof(uint64_t));
     uint64_t *appearances = calloc(L2_SETS, sizeof(uint64_t));
-    // Welford — per-epoch cyc/miss ratio
     double   *ratio_mean  = calloc(L2_SETS, sizeof(double));
     double   *ratio_M2    = calloc(L2_SETS, sizeof(double));
     uint64_t *epoch_n     = calloc(L2_SETS, sizeof(uint64_t));
@@ -101,7 +121,7 @@ int main(int argc, char **argv)
     while (1) {
         for (int set = 0; set < L2_SETS; set++) {
             prime_set(buf, set);
-            uint64_t wait = now_cycles() + 20000ULL;
+            uint64_t wait = now_cycles() + PROBE_GAP_CYCLES;
             while (now_cycles() < wait) asm volatile("lfence" ::: "memory");
 
             int mc = 0;
@@ -112,18 +132,18 @@ int main(int argc, char **argv)
 
         if (now_cycles() >= next_report) {
             epoch++;
-            printf("\n=== Epoch %d — top 20 hottest sets (ratio band [%llu, %llu]) ===\n",
-                   epoch, RATIO_MIN, RATIO_MAX);
+            printf("\n=== Epoch %d — top %d hottest sets (ratio band [%llu, %llu]) ===\n",
+                   epoch, TOP_N, RATIO_MIN, RATIO_MAX);
             printf("%-6s  %-14s  %-12s  %-10s\n",
                    "set", "avg_probe_cyc", "miss_ways", "cyc/miss");
 
-            int      top_sets[20];
-            uint64_t top_avgs[20];
-            uint64_t top_misses[20];
-            uint64_t top_ratios[20];
+            int      top_sets[TOP_N];
+            uint64_t top_avgs[TOP_N];
+            uint64_t top_misses[TOP_N];
+            uint64_t top_ratios[TOP_N];
             int top_n = 0;
 
-            for (int rank = 0; rank < 20; rank++) {
+            for (int rank = 0; rank < TOP_N; rank++) {
                 int best = -1;
                 uint64_t best_avg = 0;
                 for (int s = 0; s < L2_SETS; s++) {
@@ -143,12 +163,12 @@ int main(int argc, char **argv)
                                     ? top_avgs[top_n] / top_misses[top_n] : 0;
                 top_n++;
 
-                printf("%-6d  %-14lu  %-12lu  %-10lu\n",
-                       best, top_avgs[top_n-1], top_misses[top_n-1], top_ratios[top_n-1]);
+                if (rank < 20)
+                    printf("%-6d  %-14lu  %-12lu  %-10lu\n",
+                           best, top_avgs[top_n-1], top_misses[top_n-1], top_ratios[top_n-1]);
 
                 appearances[best]++;
 
-                // Welford update — cyc/miss ratio
                 double rv = (double)top_ratios[top_n-1];
                 epoch_n[best]++;
                 double rd = rv - ratio_mean[best];
@@ -158,10 +178,7 @@ int main(int argc, char **argv)
                 accum[best] = 0; count[best] = 0;
             }
 
-            // Leaderboard: top 5 by composite score
-            // neighbor_score penalizes sets whose adjacent sets also appear frequently
-            // (buffer aliases always cluster; victim is isolated)
-            printf("\n--- Leaderboard: top 5 by stability score ---\n");
+            printf("\n--- Leaderboard: top %d by stability score ---\n", LEADERBOARD_N);
             printf("%-5s  %-6s  %-14s  %-12s  %-10s  %-12s  %-10s\n",
                    "rank", "set", "appearances", "ratio_mean", "ratio_sd",
                    "neighbor_app", "score");
@@ -169,28 +186,19 @@ int main(int argc, char **argv)
             double scores[L2_SETS];
             for (int s = 0; s < L2_SETS; s++) {
                 if (appearances[s] == 0) { scores[s] = -1e18; continue; }
-                double n = (double)epoch_n[s];
-                double ratio_sd = n > 1 ? my_sqrt(ratio_M2[s] / (n - 1)) : 0.0;
-
-                // Sum appearances of neighboring sets within NEIGHBOR_WINDOW
-                uint64_t neighbor_app = 0;
-                for (int d = -NEIGHBOR_WINDOW; d <= NEIGHBOR_WINDOW; d++) {
-                    if (d == 0) continue;
-                    int nb = s + d;
-                    if (nb < 0 || nb >= L2_SETS) continue;
-                    neighbor_app += appearances[nb];
-                }
-
+                double rsd        = ratio_stddev(ratio_M2, epoch_n, s);
+                uint64_t nb_app   = neighbor_appearances(appearances, s);
                 scores[s] = (double)appearances[s] * APPEAR_WEIGHT
-                           - ratio_sd * RATIO_STDDEV_W
-                           - (double)neighbor_app * NEIGHBOR_W;
+                           - ratio_mean[s]         * RATIO_MEAN_W
+                           - rsd                   * RATIO_STDDEV_W
+                           - (double)nb_app        * NEIGHBOR_W;
             }
 
             int candidate_set = -1;
             double scores_copy[L2_SETS];
             memcpy(scores_copy, scores, L2_SETS * sizeof(double));
 
-            for (int rank = 1; rank <= 5; rank++) {
+            for (int rank = 1; rank <= LEADERBOARD_N; rank++) {
                 int best_set = -1;
                 double best_score = -1e18;
                 for (int s = 0; s < L2_SETS; s++) {
@@ -202,18 +210,11 @@ int main(int argc, char **argv)
                 if (best_set < 0 || appearances[best_set] == 0) break;
                 if (rank == 1) candidate_set = best_set;
 
-                double n = (double)epoch_n[best_set];
-                double ratio_sd = n > 1 ? my_sqrt(ratio_M2[best_set] / (n - 1)) : 0.0;
-                uint64_t neighbor_app = 0;
-                for (int d = -NEIGHBOR_WINDOW; d <= NEIGHBOR_WINDOW; d++) {
-                    if (d == 0) continue;
-                    int nb = best_set + d;
-                    if (nb < 0 || nb >= L2_SETS) continue;
-                    neighbor_app += appearances[nb];
-                }
+                double rsd      = ratio_stddev(ratio_M2, epoch_n, best_set);
+                uint64_t nb_app = neighbor_appearances(appearances, best_set);
                 printf("#%-4d  %-6d  %-14lu  %-12.1f  %-10.1f  %-12lu  %-10.1f\n",
                        rank, best_set, appearances[best_set],
-                       ratio_mean[best_set], ratio_sd, neighbor_app, best_score);
+                       ratio_mean[best_set], rsd, nb_app, best_score);
                 scores_copy[best_set] = -1e18;
             }
 
