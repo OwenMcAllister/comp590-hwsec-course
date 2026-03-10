@@ -1,0 +1,10 @@
+Page Size                     | 4KB | 2MB
+Page Offset Bits             | 12  | 21
+Page Number Bits             | 52  | 43
+L2 Set Index Bits            | 10  | 10
+L2 Set Index Fully Under Control? | No  | Yes
+
+Given data used:
+- L2 cache size = 1 MB
+- L2 number of sets = 1024
+- Cache line size = 64 B

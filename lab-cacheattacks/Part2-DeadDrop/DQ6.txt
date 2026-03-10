@@ -1,0 +1,11 @@
+Encode
+
+The sender reads one integer from `0` to `255`, so it is an 8-bit value. It uses one group of L2 cache sets for each bit position. If a bit is `1`, the sender creates cache activity in that bit’s sets; if a bit is `0`, it does not create activity for that bit. It repeats this many times for the same value (`SYMBOL_REPEAT`) so the receiver can measure it clearly. It also sends a small marker signal on a separate marker set group so the receiver can tell the difference between real data and idle time.
+
+Receive
+
+The receiver also allocates a 2 MB huge page and keeps checking the same set groups used by the sender. First, it checks the marker sets. If marker activity is not seen, the receiver treats that window as idle and skips decoding. If marker activity is seen, it probes each of the 8 bit set groups and counts cache misses. For each bit group, if misses are above a threshold, that bit is decoded as `1`; otherwise it is decoded as `0`. This builds one 8-bit integer value.
+
+Decode
+
+After the receiver builds the integer, it applies a small confidence filter to reduce noise. It requires the same decoded value to appear in several consecutive windows before printing it. After printing, it briefly locks out repeated prints of the same symbol and waits for a change. This keeps output stable and prevents continuous duplicate lines when the sender is between messages.

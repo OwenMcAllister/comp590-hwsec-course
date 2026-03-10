@@ -1,0 +1,11 @@
+Encode
+
+The sender reads one bit (`1` or `0`) and uses a 2 MB huge page as shared memory. If the bit is `1`, it keeps accessing selected cache sets very fast during one time window, which creates strong cache activity. If the bit is `0`, it stays mostly quiet during that window. Typing `q` stops the sender.
+
+Receive
+
+The receiver also maps a 2 MB huge page and repeatedly checks the same cache sets during each bit window. It measures access time, where slower time means more cache misses. For each small sample, it decides whether misses look high or low, and this gives a temporary vote for `1` or `0`.
+
+Decode
+
+At the end of each bit window, the receiver uses majority voting from all temporary votes to decode the final bit (`1` or `0`). To reduce noise, it only prints a value after seeing the same decoded bit three times in a row. The timing itself is measured with `measure_one_block_access_time` from `util.c`.

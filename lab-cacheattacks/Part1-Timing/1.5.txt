@@ -1,0 +1,2 @@
+Threshold between L2 and L3 latency: 130 cycles
+Threshold between L3 and DRAM latency: 230 cycles
