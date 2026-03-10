@@ -1,0 +1,8 @@
+The following resources and tools were used while completing this assignment:
+1. Riccardo Paccagnella, Deaddrop: Cache-based Covert Channel Implementation. Available at: https://github.com/ricpacca/deaddrop
+2. The address calculation tables included in this assignment were calculated manually and later verified with the help of ChatGPT.
+3. OpenAI Codex was used to help optimize the code. The prompts used included:
+    - “Check the syntax”
+    - “Check the logic of the code”
+    - “Optimize the code”
+    - “Remove redundant parts.”

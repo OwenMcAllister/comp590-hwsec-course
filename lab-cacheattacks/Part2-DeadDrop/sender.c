@@ -12,6 +12,7 @@
 #define IDLE_GAP 40
 #define MARKER_SET 64
 
+// Get the address of the first cache line in the target set
 uint8_t* get_set_addr(uint8_t *buffer, int target_set) {
         // Shift the set index to te left by 6 bits, to align int with the index bits
         int set_offset = target_set << 6;
@@ -39,6 +40,7 @@ int main(int argc, char **argv)
   // See the handout for details about hugepage management
   void *buf= mmap(NULL, BUFF_SIZE, PROT_READ | PROT_WRITE, MAP_POPULATE | MAP_ANONYMOUS | MAP_PRIVATE | MAP_HUGETLB, -1, 0);
   
+  // Check if the allocation succeeded
   if (buf == (void*) - 1) {
      perror("mmap() error\n");
      exit(EXIT_FAILURE);
@@ -49,7 +51,7 @@ int main(int argc, char **argv)
   // so later access will not suffer from such overhead.
   *((char *)buf) = 1; // dummy write to trigger page allocation
 
-
+  // Read user input and transmit it to the receiver by evicting specific cache sets.
   while (1) {
     printf("Please type a message.\n");
     char text_buf[128];
@@ -57,12 +59,14 @@ int main(int argc, char **argv)
       break;
     }
 
+    // Remove newline character from the input string
     int value = string_to_int(text_buf);
     if (value < 0 || value > 255) {
       printf("Input must be an integer in [0, 255].\n");
       continue;
     }
 
+    // Transmit the value by evicting specific cache sets.
     for (int r = 0; r < SYMBOL_REPEAT; r++) {
       // Transmit activity marker so receiver can distinguish data from idle.
       for (int rep = 0; rep < SET_REPLICAS; rep++) {
@@ -71,6 +75,7 @@ int main(int argc, char **argv)
         asm volatile("lfence" ::: "memory");
       }
 
+      // Evict cache sets corresponding to bits with value 1.
       for (int bit = 0; bit < 8; bit++) {
         int bit_val = (value >> (7 - bit)) & 1;
         if (bit_val == 1) {
@@ -83,6 +88,7 @@ int main(int argc, char **argv)
       }
     }
 
+    // Idle gap to separate consecutive messages.
     for (int q = 0; q < IDLE_GAP; q++) {
       asm volatile("lfence" ::: "memory");
     }

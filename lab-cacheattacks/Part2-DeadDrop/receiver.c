@@ -6,15 +6,16 @@
 #define HUGE_PAGE_SIZE (2 * 1024 * 1024)
 #define L2_STEP_SIZE 65536 // 2^16 allows us to modify the tag, while keeping the set index the same
 #define MISS_THRESHOLD 130 // based on timing data from P1
-#define BASE_SET 200
-#define BIT_STRIDE 64
-#define SET_REPLICAS 3
-#define PRIME_PROBE_LINES 8
-#define BIT_MISS_THRESHOLD 5
-#define REARM_SAMPLES 8
-#define MARKER_SET 64
-#define MARKER_MISS_THRESHOLD 10
+#define BASE_SET 200 // agreed upon set index for the channel
+#define BIT_STRIDE 64 // distance in the set index between bits in the channel, to avoid self-thrashing
+#define SET_REPLICAS 3 // number of sets to use for each bit, to increase signal-to-noise ratio
+#define PRIME_PROBE_LINES 8 // number of lines to prime/probe in each set, to balance signal strength with self-thrashing
+#define BIT_MISS_THRESHOLD 5 // number of misses to classify a bit as 1, based on timing data from P1
+#define REARM_SAMPLES 8 // number of consecutive matching samples to confirm a value
+#define MARKER_SET 64 
+#define MARKER_MISS_THRESHOLD 10 // number of misses in the marker set to classify the channel as active, based on timing data from P1
 
+// Allocate a huge page, returning a pointer to the buffer. Exits on failure.
 void* allocate_huge_page() {
 	void *buffer = mmap(NULL, HUGE_PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_POPULATE | MAP_ANONYMOUS | MAP_PRIVATE | MAP_HUGETLB, -1, 0);
 
@@ -26,7 +27,7 @@ void* allocate_huge_page() {
 	return buffer;
 }
 
-
+// Given a buffer and a target cache set index, return a pointer to the start of that cache set in the buffer
 uint8_t* get_set_addr(uint8_t *buffer, int target_set) {
 	// Shift the set index to te left by 6 bits, to align int with the index bits
 	int set_offset = target_set << 6;
@@ -48,6 +49,7 @@ void evict_l2_set(uint8_t *buffer, int target_set) {
 	}
 }
 
+// Probe a cache set by measuring access times to the lines in the set, returning the number of lines that miss in the cache
 int probe_cache_set(uint8_t *buffer, int target_set) {
 	uint8_t *set_addr = get_set_addr(buffer, target_set);
 	int misses = 0;
@@ -105,13 +107,15 @@ int main(int argc, char **argv)
 		
 		// Wait without usleep, so we don't give up the core
 		for (volatile int w = 0; w < 50000; w++) {}
-
+		
+		// Probe the marker set to see if the sender is active, before probing the channel sets.
 		int marker_misses = 0;
 		for (int j = 0; j < SET_REPLICAS; j++) {
 			int marker_target_set = MARKER_SET + (j * 4);
 			marker_misses += probe_cache_set(buffer, marker_target_set);
 		}
 
+		// condition to determine if sender is active, based on timing data from P1
 		if (marker_misses <= MARKER_MISS_THRESHOLD) {
 			last_char = -1;
 			streak = 0;
@@ -137,6 +141,7 @@ int main(int argc, char **argv)
 			continue;
 		}
 
+		// confidence checking to avoid false positives
 		if (recv_value == last_char) {
 			if (streak < CONFIDENCE_THRESH) {
 				streak++;
