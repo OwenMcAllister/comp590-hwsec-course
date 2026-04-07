@@ -1,0 +1,13 @@
+## Discussion Question 1: How many addresses need to be flushed at the first step?
+
+256 addresses needs to be flushed at the first step. As the secret is one byte at a time, and one byte can have 256 possible values (0x00 to 0xFF). 
+
+The victim pseudocode says: load shared_mem[4096 * secret_data]
+
+The value of the secret_data chooses which page-sized offset is accessed. As, 4096 is the stride, each possible byte value maps to different page in shared_mem. So to make sure none of the possible secret-dependent pages are already cached, we need to flush all the possible candidate locations. 
+
+## Now assume the attacker and victim no longer share a memory region. Would your attack still work? If not, what changes would you need to make to make it work?
+
+No, the attack would not work without a shared memory. The current approach relies on Flush+Reload, which requires the attacker and victim to access the same physical memory so the attacker can directly observe which cache line was loaded.
+
+To make the attack work, we would need to switch to a technique like Prime+Probe, where the attacker infers the victim’s memory access by observing cache set evictions instead of shared addresses.

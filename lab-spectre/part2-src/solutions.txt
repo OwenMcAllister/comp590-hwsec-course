@@ -1,0 +1,5 @@
+## Discussion Question 3: In our example, the attacker tries to leak the values in the array secret_part2. In a real-world attack, people can use Spectre to leak arbitrary values in the victim’s address space. Explain how the attacker can achieve this
+
+## Discussion Question 4: Try to tune the training parameters and answer this question: What is the fewest number of times you need to train the branch on line 9 in Listing 3 to make the attack work?
+
+Using our current attacker configuration (attack_attempts = 700), the attack worked with a minimum of 1 in-bounds branch-training iteration before the out-of-bounds access.
