@@ -5,7 +5,7 @@
 #define BUFFER_SIZE_MB 1024
 
 // Size of hugepages in system
-#define HUGE_PAGE_SIZE (1ULL<< 21)
+#define HUGE_PAGE_SIZE (1ULL<< 21) // size = 2MB
 #define HUGE_PAGE_MASK  (~(HUGE_PAGE_SIZE - 1))
 
 // Size of DRAM row (1 bank)

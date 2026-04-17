@@ -26,6 +26,29 @@ void * allocated_mem;
 void setup_PPN_VPN_map(void * mem_map,
                        std::map<uint64_t, uint64_t> &PPN_VPN_map) {
     // TODO: Exercise 1-3
+    // Clear any prior contents so the map reflects only the current allocation.
+    PPN_VPN_map.clear();
+
+    // walk the allocated region in huge-page granularity (2MB/page).
+    uint64_t region_size = BUFFER_SIZE_MB * 1024ULL * 1024ULL;
+
+    // For each huge page, translate one virtual address, then store PPN -> VPN.
+    for (uint64_t offset = 0; offset < region_size; offset += HUGE_PAGE_SIZE) {
+        uint64_t virt_addr = reinterpret_cast<uint64_t>(mem_map) + offset;
+        uint64_t phys_addr = virt_to_phys(virt_addr);
+
+        // Skip pages that are not currently present/mapped.
+        if (phys_addr == 0) {
+            continue;
+        }
+
+        // 2MB pages => lower 21 bits are offset; upper bits are page number.
+        uint64_t phys_page_number = phys_addr >> 21;
+        uint64_t virt_page_number = virt_addr >> 21;
+
+        // Reverse page-table entry: physical page -> virtual page.
+        PPN_VPN_map[phys_page_number] = virt_page_number;
+    }
 }
 
 /*
@@ -73,18 +96,26 @@ uint64_t virt_to_phys(uint64_t virt_addr) {
 
     // TODO: Exercise 1-1
     // Compute the virtual page number from the virtual address
-    uint64_t virt_page_number = virt_addr / 0x1000;
+    // (4KB pages => lower 12 bits are offset, upper bits are VPN)
+    // shifting right by 12 is equivalent to dividing by 4096.
+    uint64_t virt_page_number = virt_addr >> 12;
     uint64_t file_offset = virt_page_number * sizeof(uint64_t);
 
     if ((pagemap = fopen("/proc/self/pagemap", "r"))) {
         if (lseek(fileno(pagemap), file_offset, SEEK_SET) == file_offset) {
             if (fread(&entry, sizeof(uint64_t), 1, pagemap)) {
                 if (entry & (1ULL << 63)) {
-                    uint64_t phys_page_number = entry & ((1ULL << 54) - 1);
+                    // Extract the 55-bit physical page number (PPN).
+                    uint64_t phys_page_number = entry & ((1ULL << 55) - 1);
+
                     // TODO: Exercise 1-1
                     // Using the extracted physical page number,
                     // derive the physical address
-                    phys_addr = 0;
+                    // (physical address = PPN || page offset)
+                    // keep the original 12-bit page offset from virt_addr.
+                    uint64_t page_offset = virt_addr & 0xFFF;
+                    // place PPN in upper bits, then merge offset.
+                    phys_addr = (phys_page_number << 12) | page_offset;
                 } 
             }
         }
@@ -108,7 +139,21 @@ uint64_t virt_to_phys(uint64_t virt_addr) {
 
 uint64_t phys_to_virt(uint64_t phys_addr) {
     // TODO: Exercise 1-4
-    return 0;
+    // Split physical address into [PPN | page offset] using 2MB page size.
+    uint64_t phys_page_number = phys_addr >> 21;
+    uint64_t page_offset = phys_addr & (HUGE_PAGE_SIZE - 1);
+
+    // Look up the corresponding virtual page number in the reverse page table.
+    auto it = PPN_VPN_map.find(phys_page_number);
+    if (it == PPN_VPN_map.end()) {
+        // Not mapped in our reverse table.
+        return 0;
+    }
+
+    // Reconstruct virtual address = (VPN << 21) | offset.
+    uint64_t virt_page_number = it->second;
+    uint64_t virt_addr = (virt_page_number << 21) | page_offset;
+    return virt_addr;
 }
 
 
@@ -221,4 +266,3 @@ uint64_t phys_to_rowid(uint64_t phys_ptr){
 uint64_t phys_to_colid(uint64_t phys_ptr){
     return (phys_ptr & COL_MASK) >> __builtin_ctzl(COL_MASK);
 }
-

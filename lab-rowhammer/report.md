@@ -1,10 +1,15 @@
 ## 1-2
 
 **In a 64-bit system using 4KB pages, which bits are used to represent the page offset, and which are used to represent the page number?**
+Page offset: bits `[11:0]` (12 bits).  
+Page number (VPN): bits `[63:12]` (52 bits).
 
 **How about for a 64-bit system using 2MB pages? Which bits are used for page number and which are for page offset?**
+Page offset: bits `[20:0]` (21 bits).  
+Page number (VPN): bits `[63:21]` (43 bits).
 
 **In a 2GB buffer, how many 2MB hugepages are there?**
+`2GB / 2MB = 1024`, so there are **1024 hugepages**.
 
 ## 2-1
 
@@ -37,4 +42,3 @@
 ## 5-5
 
 **Can the Hamming(22,16) code we implemented always protect us from rowhammer attacks? If not, describe how a clever attacker could work around this scheme.**
-
