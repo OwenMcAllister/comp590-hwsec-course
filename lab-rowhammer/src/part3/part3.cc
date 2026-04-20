@@ -11,9 +11,11 @@
 #define BANKS 16
 #define CONSISTENCY_RATE 0.95
 // TODO: Threshold derived in part2
-#define THRESHOLD 1000 
+#define THRESHOLD 600 
 #define POOL_SIZE 1000
 #define ROUNDS  100
+#define REPS_PER_BIN 5
+#define MIN_CONFIDENCE 0.60
 
 
 
@@ -52,8 +54,117 @@ uint64_t median(uint64_t* vals, size_t size) {
  */
 
 std::array<std::vector<uint64_t>, BANKS> bin_rows(uint64_t starting_addr, uint64_t final_addr) {
-    // TODO - Exercise 3-1
     std::array<std::vector<uint64_t>, BANKS> bins;
+
+    // determines median latency
+    auto measure_pair_median = [](uint64_t virt_a, uint64_t virt_b) {
+        uint64_t latencies[ROUNDS];
+        for (size_t i = 0; i < ROUNDS; i++) {
+            latencies[i] = measure_bank_latency((volatile char *)virt_a, (volatile char *)virt_b);
+        }
+        return median(latencies, ROUNDS);
+    };
+
+    // Find "representative" addresses for each bank by randomly sampling addresses 
+    auto collect_representatives = [](const std::vector<uint64_t>& bin) {
+        std::vector<uint64_t> reps;
+        if (bin.empty()) {
+            return reps;
+        }
+
+        size_t sample_cnt = std::min(static_cast<size_t>(REPS_PER_BIN), bin.size());
+        reps.reserve(sample_cnt);
+        for (size_t i = 0; i < sample_cnt; i++) {
+            size_t idx = (i * bin.size()) / sample_cnt;
+            if (idx >= bin.size()) {
+                idx = bin.size() - 1;
+            }
+            reps.push_back(bin[idx]);
+        }
+        return reps;
+    };
+
+    // Compare a given address with the representatives of each bank and classify it into the bank with the most "same bank" votes. 
+    auto classify_bank = [&](uint64_t virt_addr, bool allow_low_confidence) {
+        int best_bin = -1;
+        double best_confidence = 0.0;
+        uint64_t best_avg_latency = 0;
+
+        for (size_t b = 0; b < BANKS; b++) {
+            if (bins[b].empty()) {
+                continue;
+            }
+
+            std::vector<uint64_t> reps = collect_representatives(bins[b]);
+            if (reps.empty()) {
+                continue;
+            }
+
+            size_t same_bank_votes = 0;
+            uint64_t latency_sum = 0;
+            size_t measured_cnt = 0;
+
+            for (uint64_t rep_phys : reps) {
+                uint64_t rep_virt = phys_to_virt(rep_phys);
+                if (rep_virt == 0) {
+                    continue;
+                }
+
+                uint64_t med = measure_pair_median(virt_addr, rep_virt);
+                latency_sum += med;
+                measured_cnt++;
+                if (med >= THRESHOLD) {
+                    same_bank_votes++;
+                }
+            }
+
+            if (measured_cnt == 0) {
+                continue;
+            }
+
+            double confidence = static_cast<double>(same_bank_votes) / measured_cnt;
+            uint64_t avg_latency = latency_sum / measured_cnt;
+
+            if (confidence > best_confidence ||
+                (confidence == best_confidence && avg_latency > best_avg_latency)) {
+                best_confidence = confidence;
+                best_avg_latency = avg_latency;
+                best_bin = static_cast<int>(b);
+            }
+        }
+
+        if (best_bin != -1 && (allow_low_confidence || best_confidence >= MIN_CONFIDENCE)) {
+            return best_bin;
+        }
+        return -1;
+    };
+
+    // Iterate through addresses, classify them into bins, and add them to the corresponding bin
+    for (uint64_t addr = starting_addr; addr < final_addr; addr += ROW_STRIDE ) {
+        uint64_t phys_addr = virt_to_phys(addr);
+
+        int assigned_bin = classify_bank(addr, false); // First try to classify with high confidence requirement
+
+        if (assigned_bin == -1) {
+            // No confident match: seed a new bin if possible.
+            for (size_t b = 0; b < BANKS; b++) {
+                if (bins[b].empty()) {
+                    assigned_bin = (int)b;
+                    break;
+                }
+            }
+        }
+
+        if (assigned_bin == -1) {
+            // All bins are already seeded: attach to the nearest cluster.
+            assigned_bin = classify_bank(addr, true);
+        }
+
+        if (assigned_bin != -1) {
+            bins[assigned_bin].push_back(phys_addr); // Store physical address in the bin
+        }
+    }
+
     return bins;
 }
 
@@ -120,6 +231,7 @@ std::optional<uint64_t> find_candidate_function(const std::array<std::vector<uin
             std::vector<uint64_t> bank_comp(bin.size());
             std::transform(bin.begin(), bin.end(), bank_comp.begin(), f);
             auto [id, freq] = get_most_frequent(bank_comp);
+            printf("Function %zu: bank id %lu appears with frequency %.2f in this bin\n", i, id, freq);
             if (freq < CONSISTENCY_RATE) {
                 good = false;
                 break;
