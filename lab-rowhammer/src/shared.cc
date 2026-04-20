@@ -25,7 +25,18 @@ void * allocated_mem;
  */
 void setup_PPN_VPN_map(void * mem_map,
                        std::map<uint64_t, uint64_t> &PPN_VPN_map) {
-    // TODO: Exercise 1-3
+    uint64_t phys_addr;
+    // You can assume the page size is 2MB as opposed to 4KB.
+    // The populated reverse page table should cover a 2GB region following the pointer mem map
+    for (uint64_t offset = 0; offset < (1UL << 31); offset += HUGE_PAGE_SIZE) {
+        uint64_t virt_addr = (uint64_t)mem_map + offset;
+        phys_addr = virt_to_phys(virt_addr);
+        if (phys_addr != 0) {
+            uint64_t vpn = virt_addr / HUGE_PAGE_SIZE;
+            uint64_t ppn = phys_addr / HUGE_PAGE_SIZE;
+            PPN_VPN_map[ppn] = vpn;
+        }
+    }
 }
 
 /*
@@ -80,11 +91,11 @@ uint64_t virt_to_phys(uint64_t virt_addr) {
         if (lseek(fileno(pagemap), file_offset, SEEK_SET) == file_offset) {
             if (fread(&entry, sizeof(uint64_t), 1, pagemap)) {
                 if (entry & (1ULL << 63)) {
-                    uint64_t phys_page_number = entry & ((1ULL << 54) - 1);
-                    // TODO: Exercise 1-1
-                    // Using the extracted physical page number,
-                    // derive the physical address
-                    phys_addr = 0;
+                    uint64_t phys_page_number = entry & ((1ULL << 54) - 1); // The physical page number is stored in the lower 54 bits of the entry
+                    // Virtual page number is mapped to the physical page number
+                    // The offset within the page is the same as the offset within the virtual page
+                    // 64 bit physical address means 4 KB page size, so we multiply the physical page number by 0x1000 and add the offset
+                    phys_addr = (phys_page_number * 0x1000) + (virt_addr % 0x1000);
                 } 
             }
         }
@@ -106,9 +117,26 @@ uint64_t virt_to_phys(uint64_t virt_addr) {
  *
  */
 
+/*
+As we know that for address translation, we take the VPN and translate it to PPN, but keep
+the page offset unchanged. So a virtual address and its corresponding physical address always
+have the same page offset. When considering 2MB and 4KB pages, we can consider a 2MB
+page to consist of 512 4KB pages. For these 4KB pages, the lower 9 bits of their VPNs are
+counted as page offset for a 2MB page. Therefore, when being translated between virtual and
+physical address, these 9 bits do not need to be changed.
+*/
+
+// 4KB for probing pagemap interface, but 2MB for reverse page table
 uint64_t phys_to_virt(uint64_t phys_addr) {
-    // TODO: Exercise 1-4
-    return 0;
+    uint64_t phys_page_number = phys_addr / HUGE_PAGE_SIZE;
+    auto it = PPN_VPN_map.find(phys_page_number);
+    if (it != PPN_VPN_map.end()) {
+        uint64_t virt_page_number = it->second;
+        // The offset within the page is the same as the offset within the physical page
+        return (virt_page_number * HUGE_PAGE_SIZE) + (phys_addr % HUGE_PAGE_SIZE);
+    } else {
+        return 0;
+    }
 }
 
 
@@ -142,8 +170,25 @@ char* get_rand_addr(size_t buf_size)
  *
  */
 uint64_t measure_bank_latency(volatile char *addr_A, volatile char *addr_B) {
-    // TODO: Exercise 2-2
-    return 0; 
+    /*
+    Given two physical addresses x and y, again make
+    sure both of the addresses are not cached. Access the two addresses back-to-back without memory
+    fences in between and measure their collective access latency. If the two addresses are mapped to
+    the same bank and different rows, they will cause memory bus contention in addition to row buffer
+    conflicts, and thus will result in even longer latency.
+    */
+
+    clflush(addr_A); 
+    clflush(addr_B);
+
+    // 352
+
+    uint64_t start = rdtscp();
+    // Access the two addresses back-to-back without memory fences in between
+    volatile char temp_A = *addr_A;
+    volatile char temp_B = *addr_B;
+    uint64_t end = rdtscp();
+    return end - start;
 }
 
 /*
