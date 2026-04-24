@@ -17,8 +17,18 @@ uint8_t parity_eqs[5][16] = {                 \
 uint32_t genParity(uint32_t data) {
     uint32_t parity = 0;
 
-    // TODO: Exercise 5-2, Generate the parity bits for the data
-    
+    // data is the data of the decoded hamming_struct
+    for (int p = 0; p < NUM_PARITY_BITS; p++) {
+        uint8_t parity_bit = 0;
+        for (int bit = 0; bit < NUM_DATA_BITS; bit++) {
+            if (parity_eqs[p][bit]) { // It is included in calculating parity bit p
+                printf("Data bit %d value: %d contributes to parity bit %d\n", bit, getBit(data, bit), p);
+                parity_bit ^= getBit(data, bit); // XOR the corresponding data bits together to get the parity bit value
+            }
+        }
+        parity |= parity_bit << p; // Set parity bit p in the parity output
+        printf("Parity bit %d value: %d\n", p, parity_bit);
+    }
     return parity;
 }
 
@@ -35,9 +45,15 @@ struct hamming_result findHammingErrors(uint32_t encoded) {
 
     // TODO: Exercise 5-4, Compute the syndrome
     uint32_t syndrome = 0;
+    // XOR extracted parity with regenerated parity to get the syndrome
+    syndrome = recordedParity ^ regenParity;
 
     // TODO: Exercise 5-4, Compute P5 Error bit
     uint32_t P5_Error_bit = 0;
+    // Overall parity bit is the XOR of all bits in the encoded value, which is P5
+    for (int i = 0; i < TOTAL_BITS; i++) {
+        P5_Error_bit ^= getBit(encoded, i);
+    }
  
     // TODO: Exercise 5-4, Determine the error type
     _ERROR_TYPE error = NO_ERROR;
@@ -54,6 +70,13 @@ uint32_t verifyAndRepair(uint32_t encoded) {
 
     // TODO: Exercise 5-4, If the error type is correctable, correct it here!
     uint32_t out = encoded;
+    if (result.error == SINGLE_ERROR) {
+        // If there's a single error, the syndrome gives the bit index of the error
+        out = flipBit(encoded, result.syndrome);
+    } else if (result.error == PARITY_ERROR) {
+        // If there's a parity error, we can flip the overall parity bit (the last bit) to correct it
+        out = flipBit(encoded, TOTAL_BITS - 1);
+    }
 
     return out;
 }
