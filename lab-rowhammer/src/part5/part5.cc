@@ -18,17 +18,36 @@ uint32_t genParity(uint32_t data) {
     uint32_t parity = 0;
 
     // data is the data of the decoded hamming_struct
-    for (int p = 0; p < NUM_PARITY_BITS; p++) {
+    for (int p = 0; p < NUM_PARITY_BITS - 1; p++) {
         uint8_t parity_bit = 0;
         for (int bit = 0; bit < NUM_DATA_BITS; bit++) {
             if (parity_eqs[p][bit]) { // It is included in calculating parity bit p
-                printf("Data bit %d value: %d contributes to parity bit %d\n", bit, getBit(data, bit), p);
+                // printf("Data bit %d value: %d contributes to parity bit %d\n", bit, getBit(data, bit), p);
                 parity_bit ^= getBit(data, bit); // XOR the corresponding data bits together to get the parity bit value
             }
         }
         parity |= parity_bit << p; // Set parity bit p in the parity output
-        printf("Parity bit %d value: %d\n", p, parity_bit);
+        // printf("Parity bit %d value: %d\n", p, parity_bit);
     }
+
+    // P5 is the XOR of all data bits and parity bits (P0-P4)
+    // Overall parity bit is computed by XORing all 22 bits together
+
+    uint8_t p5 = 0;
+    for (int bit = 0; bit < NUM_DATA_BITS; bit++) {
+        p5 ^= getBit(data, bit);
+    } // 1. XOR all the data bits together to get an intermediate parity value for P5
+    
+    for (int p = 0; p < NUM_PARITY_BITS - 1; p++) {
+        p5 ^= getBit(parity, p);
+    } // 2. XOR the other parity bits together to get the overall parity bit value (P5)
+
+    // 3. Add the overall parity bit (P5) to the parity output
+    parity |= ((uint32_t)p5) << (NUM_PARITY_BITS - 1);
+
+    printf("Overall parity bit (P5) value: %d\n", p5);
+    printf("Final parity value (P5-P0): %x\n", parity);
+
     return parity;
 }
 
@@ -46,7 +65,8 @@ struct hamming_result findHammingErrors(uint32_t encoded) {
     // TODO: Exercise 5-4, Compute the syndrome
     uint32_t syndrome = 0;
     // XOR extracted parity with regenerated parity to get the syndrome
-    syndrome = recordedParity ^ regenParity;
+    // Only use P0-P4 for syndrome calculation, exclude P5
+    syndrome = (recordedParity ^ regenParity) & ((1U << (NUM_PARITY_BITS - 1)) - 1);
 
     // TODO: Exercise 5-4, Compute P5 Error bit
     uint32_t P5_Error_bit = 0;
@@ -57,6 +77,19 @@ struct hamming_result findHammingErrors(uint32_t encoded) {
  
     // TODO: Exercise 5-4, Determine the error type
     _ERROR_TYPE error = NO_ERROR;
+    if (syndrome == 0 && P5_Error_bit == 0) {
+        error = NO_ERROR; // No error if syndrome is 0 and overall parity bit is correct
+    } else if (syndrome != 0 && P5_Error_bit == 1) {
+        error = SINGLE_ERROR; // Single bit error if syndrome is not 0 and overall parity bit is incorrect
+    } else if (syndrome != 0 && P5_Error_bit == 0) {
+        error = DOUBLE_ERROR; // Double bit error if syndrome is not 0 but overall parity bit is correct
+    } else if (syndrome == 0 && P5_Error_bit == 1) {
+        error = PARITY_ERROR; // Parity bit error if syndrome is 0 but overall parity bit is incorrect
+    }
+
+    printf("--- Debug Info ---\n");
+    printf("Recorded Parity: %x, Regenerated Parity: %x, Syndrome: %x, P5_Error_bit: %d\n", recordedParity, regenParity, syndrome, P5_Error_bit);
+    printf("Error Type: %d\n", error);
     
     return {error, syndrome};
 }
@@ -71,16 +104,19 @@ uint32_t verifyAndRepair(uint32_t encoded) {
     // TODO: Exercise 5-4, If the error type is correctable, correct it here!
     uint32_t out = encoded;
     if (result.error == SINGLE_ERROR) {
-        // If there's a single error, the syndrome gives the bit index of the error
-        out = flipBit(encoded, result.syndrome);
+        // If there's a single error, we can correct it by flipping the bit indicated by the syndrome
+        // Hamming syndrome is 1-based encoded bit position, so subtract 1 to get the 0-based bit index
+        uint32_t errorBit = result.syndrome - 1;
+        printf("Single error detected! Syndrome indicates bit index %d is flipped.\n", errorBit);
+        out = flipBit(encoded, errorBit);
     } else if (result.error == PARITY_ERROR) {
+        printf("Parity error detected! Flipping the overall parity bit to correct it.\n");
         // If there's a parity error, we can flip the overall parity bit (the last bit) to correct it
         out = flipBit(encoded, TOTAL_BITS - 1);
     }
 
     return out;
 }
-
 /*
  *
  * DO NOT MODIFY BELOW ME
