@@ -1,3 +1,5 @@
+// declaration for functions which help checking the solution of the project
+
 #ifndef VERIF_VERIF_HH
 #define VERIF_VERIF_HH
 

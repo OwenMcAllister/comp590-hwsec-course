@@ -2,7 +2,7 @@
 #include "../params.hh"
 #include "../util.hh"
 
-#define SAMPLES 1000
+#define SAMPLES 10000
 #define ROUNDS  1000
 
 

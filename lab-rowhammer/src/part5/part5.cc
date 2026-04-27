@@ -18,6 +18,30 @@ uint32_t genParity(uint32_t data) {
     uint32_t parity = 0;
 
     // TODO: Exercise 5-2, Generate the parity bits for the data
+    // Generate P0-P4 using the parity equation table above.
+    for (uint8_t parityBit = 0; parityBit < NUM_PARITY_BITS - 1; parityBit++) {
+        uint32_t bitValue = 0;
+
+        // XOR each data bit that participates in this parity equation.
+        for (uint8_t dataBit = 0; dataBit < NUM_DATA_BITS; dataBit++) {
+            if (parity_eqs[parityBit][dataBit]) {
+                bitValue ^= getBit(data, dataBit);
+            }
+        }
+
+        parity |= bitValue << parityBit;
+    }
+
+    // Generate P5 as the overall parity across all data bits and P0-P4.
+    uint32_t overallParity = 0;
+    for (uint8_t dataBit = 0; dataBit < NUM_DATA_BITS; dataBit++) {
+        overallParity ^= getBit(data, dataBit);
+    }
+    for (uint8_t parityBit = 0; parityBit < NUM_PARITY_BITS - 1; parityBit++) {
+        overallParity ^= getBit(parity, parityBit);
+    }
+
+    parity |= overallParity << (NUM_PARITY_BITS - 1);
     
     return parity;
 }
@@ -34,13 +58,27 @@ struct hamming_result findHammingErrors(uint32_t encoded) {
     uint32_t regenParity = genParity(decoded.data);
 
     // TODO: Exercise 5-4, Compute the syndrome
-    uint32_t syndrome = 0;
+    // Syndrome compares stored P0-P4 with regenerated P0-P4.
+    uint32_t syndrome = (recordedParity ^ regenParity) & 0x1F;
 
     // TODO: Exercise 5-4, Compute P5 Error bit
+    // Overall parity is the XOR of all bits in the encoded value.
     uint32_t P5_Error_bit = 0;
+    for (uint8_t bit = 0; bit < TOTAL_BITS; bit++) {
+        P5_Error_bit ^= getBit(encoded, bit);
+    }
  
     // TODO: Exercise 5-4, Determine the error type
     _ERROR_TYPE error = NO_ERROR;
+    if (syndrome == 0 && P5_Error_bit == 0) {
+        error = NO_ERROR;
+    } else if (syndrome != 0 && P5_Error_bit == 1) {
+        error = SINGLE_ERROR;
+    } else if (syndrome != 0 && P5_Error_bit == 0) {
+        error = DOUBLE_ERROR;
+    } else {
+        error = PARITY_ERROR;
+    }
     
     return {error, syndrome};
 }
@@ -54,6 +92,13 @@ uint32_t verifyAndRepair(uint32_t encoded) {
 
     // TODO: Exercise 5-4, If the error type is correctable, correct it here!
     uint32_t out = encoded;
+    if (result.error == SINGLE_ERROR) {
+        // For P0-P4 or data errors, syndrome gives the 1-based encoded bit.
+        out = flipBit(encoded, result.syndrome - 1);
+    } else if (result.error == PARITY_ERROR) {
+        // P5 is the final parity bit in the encoded value.
+        out = flipBit(encoded, TOTAL_BITS - 1);
+    }
 
     return out;
 }

@@ -1,0 +1,11 @@
+The following resources and tools were used while completing this assignment:
+1. Most of the calculations included in this assignment were done manually and later verified with the help of ChatGPT.
+2. OpenAI Codex was used to help optimize the code. The prompts used included:
+    - “Check the syntax”
+    - “Check the logic of the code”
+    - “Optimize the code”
+    - “Remove redundant parts.”
+    - “Optimize the implementation technique to get a higher rate of bit flips”
+3. I reviewed some of the solutions and resources from the following links:
+    - https://github.com/google/rowhammer-test
+    - https://github.com/comsec-group/blacksmith
